@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Sniper - V8 Mobile</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    
+    <style>
+        .card-row:hover { background-color: #f0f9ff; transition: background-color 0.2s; }
+        .ratio-high { color: #16a34a; font-weight: 800; }
+        .ratio-extreme { color: #dc2626; font-weight: 900; text-decoration: underline; }
+        
+        @media (max-width: 640px) {
+            .hide-mobile { display: none; }
+            body { padding: 0.5rem; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 p-6 min-h-screen">
+
+    <div id="config-screen" class="hidden fixed inset-0 bg-slate-800 bg-opacity-95 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full">
+            <h2 class="text-2xl font-bold text-slate-800 mb-4 text-center">⚙️ Configuración Inicial</h2>
+            <p class="text-sm text-slate-500 mb-6 text-center">Introduce tus credenciales de Supabase una sola vez. Se guardarán en este dispositivo.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Supabase URL</label>
+                    <input type="text" id="input-url" placeholder="https://xyz.supabase.co" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Supabase Anon Key</label>
+                    <input type="password" id="input-key" placeholder="eyJhbGciOiJIUzI1..." class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+                <button onclick="saveConfig()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition">
+                    Guardar y Conectar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-screen" class="max-w-7xl mx-auto opacity-0 transition-opacity duration-500">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 md:p-6 rounded-xl shadow-sm">
+            <div class="text-center md:text-left mb-4 md:mb-0">
+                <h1 class="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">🎯 MTG Sniper <span class="text-xs bg-slate-200 text-slate-500 px-2 py-1 rounded ml-2 align-middle">V8</span></h1>
+                <p class="text-xs md:text-sm text-slate-500 mt-1" id="status-text">Conectando...</p>
+            </div>
+            
+            <div class="flex gap-2 w-full md:w-auto">
+                <button onclick="copyToClipboardSafe()" class="flex-1 md:flex-none flex justify-center items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <span class="md:inline">Copiar</span>
+                </button>
+                <button onclick="resetConfig()" class="bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold py-3 px-4 rounded-lg shadow-sm transition" title="Borrar Claves">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
+            <div class="overflow-x-auto">
+                <table class="min-w-full leading-normal">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-3 border-b bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase">Carta</th>
+                            <th class="px-2 py-3 border-b bg-slate-50 text-center text-xs font-bold text-slate-500 uppercase">Set</th>
+                            <th class="px-4 py-3 border-b bg-slate-50 text-right text-xs font-bold text-slate-500 uppercase">EUR</th>
+                            <th class="hide-mobile px-6 py-3 border-b bg-slate-50 text-right text-xs font-bold text-slate-500 uppercase">USD</th>
+                            <th class="px-4 py-3 border-b bg-slate-50 text-center text-xs font-bold text-slate-500 uppercase">Gap</th>
+                            <th class="hide-mobile px-6 py-3 border-b bg-slate-50 text-center text-xs font-bold text-slate-500 uppercase">Rank</th>
+                            <th class="px-4 py-3 border-b bg-slate-50 text-center text-xs font-bold text-slate-500 uppercase">Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="mt-4 text-center pb-8">
+             <p class="text-xs text-slate-400">Filtro activo: Rentabilidad Real > 30% | Excluidos: MB1/MB2/WC/PLST</p>
+        </div>
+    </div>
+
+    <script>
+        // --- GESTIÓN DE CREDENCIALES ---
+        let supabase = null;
+        let globalData = [];
+
+        function initApp() {
+            const storedUrl = localStorage.getItem('supabase_url');
+            const storedKey = localStorage.getItem('supabase_key');
+
+            if (!storedUrl || !storedKey) {
+                document.getElementById('config-screen').classList.remove('hidden');
+                document.getElementById('main-screen').classList.add('hidden');
+            } else {
+                document.getElementById('config-screen').classList.add('hidden');
+                document.getElementById('main-screen').classList.remove('opacity-0');
+                
+                // Iniciar Supabase
+                try {
+                    supabase = window.supabase.createClient(storedUrl, storedKey);
+                    loadData();
+                } catch (e) {
+                    alert("Error en las claves guardadas. Reseteando...");
+                    resetConfig();
+                }
+            }
+        }
+
+        function saveConfig() {
+            const url = document.getElementById('input-url').value.trim();
+            const key = document.getElementById('input-key').value.trim();
+
+            if (!url || !key) {
+                alert("Por favor, introduce ambos valores.");
+                return;
+            }
+
+            localStorage.setItem('supabase_url', url);
+            localStorage.setItem('supabase_key', key);
+            location.reload(); // Recargar para iniciar
+        }
+
+        function resetConfig() {
+            if(confirm("¿Quieres borrar las claves de este dispositivo?")) {
+                localStorage.removeItem('supabase_url');
+                localStorage.removeItem('supabase_key');
+                location.reload();
+            }
+        }
+
+        // --- CARGA DE DATOS ---
+        async function loadData() {
+            const { data, error } = await supabase.rpc('get_arbitrage_opportunities');
+
+            if (error) {
+                console.error(error);
+                document.getElementById('status-text').innerText = "❌ Error de conexión";
+                document.getElementById('table-body').innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-500 font-bold">Error: ${error.message} <br> <button onclick="resetConfig()" class="mt-2 underline text-sm">Cambiar Claves</button></td></tr>`;
+                return;
+            }
+
+            globalData = data;
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            document.getElementById('status-text').innerText = `Actualizado: ${new Date().toLocaleDateString()} | ${data.length} Oportunidades`;
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-500">No hay oportunidades hoy que cumplan tus filtros estrictos.</td></tr>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const ratioClass = item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high';
+                const cleanNameForUrl = item.name.replace(/ /g, '-').replace(/'/g, ''); 
+                const safeLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanNameForUrl}`;
+
+                const row = `
+                    <tr class="card-row border-b border-slate-100">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 w-10 h-10 hidden md:block relative group">
+                                    <img class="w-full h-full rounded-full border border-slate-200 object-cover" src="${item.image_uri}" />
+                                    <img class="hidden group-hover:block absolute z-50 w-48 rounded shadow-xl border-4 border-white top-0 left-10" src="${item.image_uri}" style="top:-50%; left:120%; min-width:200px;" />
+                                </div>
+                                <div class="md:ml-3">
+                                    <p class="text-slate-900 font-bold text-sm leading-tight">${item.name}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-2 py-3 text-center">
+                             <span class="bg-slate-200 text-slate-700 py-1 px-2 rounded text-xs font-mono font-bold uppercase">${item.set_code}</span>
+                        </td>
+                        <td class="px-4 py-3 text-right font-mono text-slate-800 font-bold">${item.eur.toFixed(2)}€</td>
+                        <td class="hide-mobile px-6 py-3 text-right font-mono text-slate-400 text-sm">$${item.usd.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="${ratioClass}">${item.ratio}x</span>
+                        </td>
+                        <td class="hide-mobile px-6 py-3 text-center">
+                            <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">#${item.edhrec_rank}</span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <a href="${safeLink}" target="_blank" class="text-blue-600 hover:text-blue-900 font-bold text-sm underline">Ver</a>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // --- COPY PASTE SEGURO ---
+        function copyToClipboardSafe() {
+            if (!globalData || globalData.length === 0) return;
+            const top50 = globalData.slice(0, 50);
+            const listText = top50.map(item => {
+                const cleanName = item.name.split(' // ')[0]; 
+                return `1 ${cleanName} (${item.set_code})`;
+            }).join('\n');
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(listText).then(onCopySuccess).catch(() => fallbackCopyText(listText));
+            } else {
+                fallbackCopyText(listText);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            textArea.focus(); textArea.select();
+            try {
+                if(document.execCommand('copy')) onCopySuccess();
+                else alert('Error copiando. Hazlo manualmente.');
+            } catch (err) { console.error(err); }
+            document.body.removeChild(textArea);
+        }
+
+        function onCopySuccess() {
+            Toastify({
+                text: "✅ Lista copiada",
+                duration: 3000, 
+                gravity: "top", position: "center", 
+                style: { background: "#10b981", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }
+            }).showToast();
+        }
+
+        // Arrancamos
+        initApp();
+    </script>
+</body>
+</html>

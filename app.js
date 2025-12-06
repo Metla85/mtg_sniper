@@ -25,11 +25,10 @@ window.onload = function() {
     }
 };
 
-// --- CARGA DE DATOS (Modo Tabla) ---
+// --- CARGA DE DATOS ---
 async function loadData() {
     if (currentMode === 'search') return;
 
-    // Gestión de Vistas
     document.getElementById('view-table').classList.remove('hidden');
     document.getElementById('view-search').classList.add('hidden');
     document.getElementById('status-bar').classList.remove('hidden');
@@ -68,6 +67,11 @@ function renderTable() {
         const rankChange = item.rank_change || 0;
         let arrow = rankChange > 0 ? `<span class="rank-up">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-slate-300">—</span>');
 
+        // LINKS
+        const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
+        const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
+        const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
+
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50 transition-colors">
                 <td class="px-4 py-3 pl-6">
@@ -85,9 +89,19 @@ function renderTable() {
                 <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">${rankInfo}</td>
                 <td class="px-4 py-3 text-center text-xs font-bold">${arrow}</td>
                 <td class="px-4 py-3 text-center">
-                    <div class="flex justify-center gap-2">
-                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50">📊</button>
-                        <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50">🛒</a>
+                    <div class="icon-group flex justify-center gap-1">
+                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
+                        </button>
+                        <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        </a>
+                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CardKingdom">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
+                        </a>
+                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDHRec">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        </a>
                     </div>
                 </td>
             </tr>
@@ -96,7 +110,7 @@ function renderTable() {
     });
 }
 
-// --- SISTEMA DE BÚSQUEDA ---
+// --- BÚSQUEDA ---
 function initAutocomplete() {
     const input = document.getElementById('search-input');
     const list = document.getElementById('suggestions-list');
@@ -134,14 +148,13 @@ async function performSearch(name) {
     document.getElementById('suggestions-list').classList.add('hidden');
     document.getElementById('search-input').value = name;
     document.getElementById('search-placeholder').classList.add('hidden');
+    document.getElementById('copy-btn').classList.add('hidden');
     
     const grid = document.getElementById('search-results-grid');
     grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Buscando...</div>';
 
     const { data } = await supabase.rpc('search_cards', { keyword: name });
-    
-    // IMPORTANTE: Actualizar currentData para que las gráficas funcionen
-    currentData = data || []; 
+    currentData = data || [];
     grid.innerHTML = '';
 
     if (currentData.length === 0) {
@@ -149,16 +162,20 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} versiones`;
+    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
         card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
         
         const gapHtml = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded border border-green-200">Gap: ${item.ratio}x</span>` : '';
-        
         const rankChange = item.rank_change || 0;
         let arrow = rankChange > 0 ? `<span class="rank-up text-sm">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down text-sm">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-gray-300">—</span>');
+
+        // LINKS
+        const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
+        const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
+        const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
 
         card.innerHTML = `
             <div class="flex p-4 gap-4 items-start">
@@ -195,33 +212,36 @@ async function performSearch(name) {
                     <div class="mt-2 text-right">${gapHtml}</div>
                 </div>
             </div>
-            <div class="bg-slate-50 p-3 border-t flex justify-between items-center">
-                <button onclick="openChart(${i})" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                    📊 Historial
-                </button>
-                <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition">
-                    Comprar
-                </a>
+            <div class="bg-slate-50 p-3 border-t flex justify-between items-center gap-2">
+                <button onclick="openChart(${i})" class="flex-1 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 py-2 rounded shadow-sm">📊 Historial</button>
+                <div class="flex gap-1">
+                    <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50" title="MKM">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    </a>
+                    <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 bg-emerald-50" title="CK">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
+                    </a>
+                    <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 bg-purple-50" title="EDH">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </a>
+                </div>
             </div>
         `;
         grid.appendChild(card);
     });
 }
 
-// --- UTILIDADES ---
 function switchMode(mode) {
     currentMode = mode;
     ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
         const btn = document.getElementById('tab-'+m);
-        btn.className = (m === mode) 
-            ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' 
-            : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
+        btn.className = (m === mode) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
     });
 
     if (mode === 'search') {
         document.getElementById('view-table').classList.add('hidden');
         document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('status-bar').classList.add('hidden');
+        document.getElementById('status-bar').classList.add('hidden'); 
         document.getElementById('search-input').focus();
     } else {
         document.getElementById('view-table').classList.remove('hidden');
@@ -237,10 +257,9 @@ function switchMode(mode) {
 async function openChart(i) {
     const item = currentData[i];
     
-    // Si no hay item (error de índice), abortamos
-    if (!item) { alert("Error al cargar la carta."); return; }
-
-    document.getElementById('modal-chart').classList.remove('hidden');
+    // ARREGLO CLAVE: Asegurarse de que el modal se muestra ANTES de dibujar
+    const modal = document.getElementById('chart-modal');
+    modal.classList.remove('hidden');
     document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
     
     if (chartInstance) chartInstance.destroy();
@@ -249,7 +268,7 @@ async function openChart(i) {
     
     if (!data || data.length === 0) {
         alert("Sin historial.");
-        document.getElementById('modal-chart').classList.add('hidden');
+        modal.classList.add('hidden');
         return;
     }
 
@@ -266,6 +285,7 @@ async function openChart(i) {
         },
         options: { 
             maintainAspectRatio: false,
+            responsive: true,
             interaction: { mode: 'index', intersect: false },
             scales: { y: { beginAtZero: false, position: 'left' }, y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } } }
         }
@@ -287,4 +307,5 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-}
+            }
+                        

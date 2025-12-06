@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V5 (Search)</title>
+    <title>MTG Sniper V5 (Search Fix)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -23,11 +23,8 @@
         .icon-group { display: flex; gap: 8px; justify-content: center; }
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.2s; }
         .icon-btn:hover { background-color: #e2e8f0; }
-        
-        /* Input de búsqueda animado */
         .search-input { transition: all 0.3s; }
         .search-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
-        
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -56,7 +53,7 @@
         <img id="enlarged-image" class="max-w-full max-h-full object-contain" onclick="event.stopPropagation()">
     </div>
 
-    <div id="main-screen" class="max-w-6xl mx-auto opacity-0 transition-opacity duration-500">
+    <div id="main-screen" class="max-w-6xl mx-auto transition-opacity duration-500">
         
         <div class="mb-4 pt-2 flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
             <div class="flex justify-between items-center">
@@ -83,7 +80,7 @@
         </div>
 
         <div class="flex justify-between items-center mb-4 px-1">
-            <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
+            <p class="text-xs text-slate-500 font-bold" id="status-text">Iniciando...</p>
             <button onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar Lista</button>
         </div>
 
@@ -114,20 +111,31 @@
         let currentMode = 'arbitrage';
         let currentData = [];
         let searchTimeout = null;
+        let chartInstance = null; // Variable global para la gráfica
+
+        // Aseguramos que el DOM esté listo antes de ejecutar nada
+        window.onload = function() {
+            initApp();
+        };
 
         function initApp() {
             const url = localStorage.getItem('supabase_url');
             const key = localStorage.getItem('supabase_key');
-            if (!url || !key) { document.getElementById('config-screen').classList.remove('hidden'); }
-            else {
+            
+            if (!url || !key) { 
+                document.getElementById('config-screen').classList.remove('hidden'); 
+            } else {
                 document.getElementById('config-screen').classList.add('hidden');
-                document.getElementById('main-screen').classList.remove('opacity-0');
+                
                 try {
+                    // Inicializar cliente Supabase
                     supabase = window.supabase.createClient(url, key);
-                    loadData();
+                    
+                    // Iniciar listeners y cargar datos
                     setupSearch();
+                    loadData();
                 } catch (e) {
-                    alert("Error config");
+                    alert("Error crítico al iniciar: " + e.message);
                     resetConfig();
                 }
             }
@@ -136,14 +144,16 @@
         // --- SISTEMA DE BÚSQUEDA ---
         function setupSearch() {
             const searchBox = document.getElementById('search-box');
+            if(!searchBox) return;
+
             searchBox.addEventListener('input', (e) => {
                 const term = e.target.value.trim();
                 clearTimeout(searchTimeout);
                 
                 if (term.length >= 3) {
-                    searchTimeout = setTimeout(() => performSearch(term), 300); // Debounce 300ms
+                    searchTimeout = setTimeout(() => performSearch(term), 300);
                 } else if (term.length === 0) {
-                    resetSearch(false); // Reset si borra todo
+                    resetSearch(false);
                 }
             });
         }
@@ -152,17 +162,20 @@
             currentMode = 'search';
             document.getElementById('status-text').innerText = `🔍 Buscando "${term}"...`;
             document.getElementById('clear-search').classList.remove('hidden');
-            
-            // Ocultar tabs visualmente para dar foco a la búsqueda
             document.getElementById('tabs-container').classList.add('opacity-50', 'pointer-events-none');
 
+            // Llamada RPC para buscar
             const { data, error } = await supabase.rpc('search_cards', { keyword: term });
 
-            if (error) { alert("Error Búsqueda: " + error.message); return; }
+            if (error) { 
+                alert("Error Búsqueda: " + error.message); 
+                document.getElementById('status-text').innerText = "Error en búsqueda";
+                return; 
+            }
 
-            currentData = data;
-            document.getElementById('status-text').innerText = `Resultados para "${term}": ${data.length}`;
-            document.getElementById('col-metric').innerText = 'Gap'; // En búsqueda mostramos Gap USD/EUR
+            currentData = data || [];
+            document.getElementById('status-text').innerText = `Resultados para "${term}": ${currentData.length}`;
+            document.getElementById('col-metric').innerText = 'Gap';
             renderTable();
         }
 
@@ -171,18 +184,16 @@
             document.getElementById('clear-search').classList.add('hidden');
             document.getElementById('tabs-container').classList.remove('opacity-50', 'pointer-events-none');
             
-            // Restaurar modo anterior
             if (currentMode === 'search') {
-                switchMode('arbitrage'); // Vuelve al default
+                switchMode('arbitrage');
             } else if (reload) {
-                // Si pulsan el título "MTG Sniper"
                 loadData();
             }
         }
-        // ---------------------------
 
+        // --- CARGA DE DATOS ---
         async function loadData() {
-            if (currentMode === 'search') return; // No cargar datos normales si estamos buscando
+            if (currentMode === 'search') return;
 
             document.getElementById('status-text').innerText = "Cargando...";
             let query;
@@ -195,21 +206,26 @@
                 query = supabase.rpc('get_us_spikes');
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
-                query = supabase.from('demand_data').select('*').order('ratio', {ascending: false});
+                // Usamos la nueva función RPC para demanda
+                query = supabase.rpc('get_demand_spikes');
                 metricLabel = 'Demanda 7d';
             }
 
             const { data, error } = await query;
             
-            if (error) { alert("Error API: " + error.message); return; }
-            
-            if (currentMode !== 'demand') {
-                currentData = data.sort((a, b) => b.ratio - a.ratio);
-            } else {
-                currentData = data;
+            if (error) { 
+                document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center text-red-500 p-4">Error API: ${error.message}</td></tr>`;
+                return; 
             }
             
-            document.getElementById('status-text').innerText = `${data.length} resultados`;
+            currentData = data || [];
+            
+            // Ordenación estándar (Demanda ya viene ordenada por SQL)
+            if (currentMode !== 'demand') {
+                currentData.sort((a, b) => b.ratio - a.ratio);
+            }
+            
+            document.getElementById('status-text').innerText = `${currentData.length} resultados`;
             document.getElementById('col-metric').innerText = metricLabel;
             renderTable();
         }
@@ -226,13 +242,15 @@
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
             
-            if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`; return; }
+            if (!currentData || currentData.length === 0) { 
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`; 
+                return; 
+            }
 
             currentData.forEach((item, index) => {
                 let metricValue, metricClass;
                 
                 if (currentMode === 'search') {
-                    // En búsqueda, mostramos el Gap si vale la pena
                     metricValue = item.ratio.toFixed(2) + 'x';
                     metricClass = item.ratio > 1.5 ? 'ratio-high' : 'text-slate-500 bg-slate-50 px-2 py-1 rounded';
                 } else if (currentMode === 'arbitrage') {
@@ -329,11 +347,4 @@
                     maintainAspectRatio: false, 
                     interaction: { mode: 'index', intersect: false },
                     scales: {
-                        'y-price': { type: 'linear', display: true, position: 'left' },
-                        'y-rank': { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } }
-                    }
-                }
-            });
-        }
-
-        function showImageModal(url, e) { e.stopPropagation(); document.getElementById('enlarged-image').src = url; document.getElementById('image-mod
+                        'y-price': { type: 'lin

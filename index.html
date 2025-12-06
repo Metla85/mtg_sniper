@@ -12,7 +12,8 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     
     <style>
-        /* ESTILOS PERSONALIZADOS */
+        /* ESTILOS Y RESPONSIVE */
+        body { -webkit-tap-highlight-color: transparent; }
         .card-row:hover { background-color: #f8fafc; cursor: pointer; }
         .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
@@ -23,6 +24,11 @@
         /* Flechas de Rank */
         .rank-up { color: #10b981; } /* Verde para mejora (número más bajo) */
         .rank-down { color: #ef4444; } /* Rojo para empeoramiento (número más alto) */
+
+        /* Iconos de acción */
+        .icon-group { display: flex; gap: 4px; justify-content: center; }
+        .icon-btn { opacity: 0.8; transition: all 0.2s; width: 32px; height: 32px; border-radius: 8px; justify-content: center; align-items: center; }
+        .icon-btn:hover { opacity: 1; background-color: #e2e8f0; }
 
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
@@ -119,9 +125,15 @@
         async function loadData() {
             document.getElementById('status-text').innerText = "Cargando...";
             const rpcName = currentMode === 'arbitrage' ? 'get_arbitrage_opportunities' : 'get_us_spikes';
+            
+            // Las funciones RPC esperan el retorno con el campo 'edhrec_rank' (corregido en el paso anterior)
             const { data, error } = await supabase.rpc(rpcName);
             
-            if (error) { alert("Error API: " + error.message); return; }
+            if (error) { 
+                // Error de formato, RLS o que las funciones RPC no tienen la columna edhrec_rank.
+                alert("Error API: " + error.message + " - Verifica las funciones RPC y las vistas SQL."); 
+                return; 
+            }
             
             // Ordenar por métrica principal (Ratio o Growth)
             currentData = data.sort((a, b) => b.ratio - a.ratio);
@@ -148,11 +160,12 @@
                 let metricValue = currentMode === 'arbitrage' ? item.ratio.toFixed(2) + 'x' : item.ratio.toFixed(2) + '%';
                 let metricClass = currentMode === 'arbitrage' ? (item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high') : 'growth-pos';
 
-                // Lógica de Rank Change
+                // Lógica de Rank Change (Recibido como rank_change)
                 const rankChange = item.rank_change || 0;
                 const rankChangeClass = rankChange > 0 ? 'rank-up' : (rankChange < 0 ? 'rank-down' : 'text-slate-400');
                 const rankChangeArrow = rankChange > 0 ? '▲' : (rankChange < 0 ? '▼' : '—');
                 
+                // URLs y Limpieza
                 const cleanNameUrl = item.name.replace(/ /g, '-').replace(/'/g, '').replace(/\/\/.*/, '');
                 const mkmLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanNameUrl}?language=1&minCondition=3`;
                 const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
@@ -176,7 +189,7 @@
                         <td class="px-4 py-3 text-center">
                             <span class="ratio-badge ${metricClass} text-sm">${metricValue}</span>
                         </td>
-                        <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">#${item.current_rank}</td>
+                        <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">#${item.edhrec_rank}</td>
                         <td class="px-4 py-3 text-center text-xs ${rankChangeClass} font-bold">
                             ${rankChangeArrow} ${Math.abs(rankChange)}
                         </td>
@@ -207,12 +220,13 @@
             
             if (chartInstance) chartInstance.destroy();
 
-            const { data: history } = await supabase.rpc('get_card_history', { 
+            // La función RPC get_card_history debe devolver 'edhrec_rank'
+            const { data: history, error } = await supabase.rpc('get_card_history', { 
                 target_card_name: item.name, 
                 target_set_code: item.set_code 
             });
 
-            if (!history || history.length === 0) {
+            if (error || !history || history.length === 0) {
                 document.getElementById('modal-title').innerText = item.name + " (Sin Historial Disponible)";
                 return; 
             }
@@ -220,7 +234,7 @@
             const labels = history.map(h => new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'}));
             const dataEur = history.map(h => h.eur);
             const dataUsd = history.map(h => h.usd);
-            const dataRank = history.map(h => h.edhrec_rank); // Nuevo Set de datos
+            const dataRank = history.map(h => h.edhrec_rank); // Usando 'edhrec_rank' del RPC
 
             const ctx = document.getElementById('priceChart').getContext('2d');
             
@@ -270,5 +284,4 @@
         initApp();
     </script>
 </body>
-            </html>
-            
+</html>

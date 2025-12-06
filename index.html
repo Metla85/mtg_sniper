@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MTG Sniper Final</title>
-    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-    
     <style>
         body { -webkit-tap-highlight-color: transparent; }
         .card-row:hover { background-color: #f8fafc; cursor: pointer; }
@@ -30,7 +28,7 @@
 
     <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper Final</h2>
+            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper</h2>
             <input type="text" id="input-url" placeholder="URL" class="w-full p-3 border rounded-xl mb-3">
             <input type="password" id="input-key" placeholder="Key" class="w-full p-3 border rounded-xl mb-4">
             <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">Entrar</button>
@@ -120,8 +118,8 @@
                 query = supabase.rpc('get_us_spikes');
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
-                // NUEVO RECURSO: market_demand_v1
-                query = supabase.from('market_demand_v1').select('*').order('ratio', {ascending: false});
+                // ATENCIÓN: Nombre actualizado a 'demand_data'
+                query = supabase.from('demand_data').select('*').order('ratio', {ascending: false});
                 metricLabel = 'Demanda 7d';
             }
 
@@ -176,7 +174,6 @@
                 let rankChangeText = rankChange > 0 ? `▲ ${rankChange}` : (rankChange < 0 ? `▼ ${Math.abs(rankChange)}` : '—');
                 let rankChangeClass = rankChange > 0 ? 'rank-up' : (rankChange < 0 ? 'rank-down' : 'text-slate-400');
                 
-                // URLs
                 const cleanName = item.name.replace(/ /g, '-').replace(/'/g, '').replace(/\/\/.*/, '');
                 const mkmLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanName}?language=1&minCondition=3`;
                 const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
@@ -259,5 +256,4 @@
         initApp();
     </script>
 </body>
-    </html>
-    
+</html>

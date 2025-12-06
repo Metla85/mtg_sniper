@@ -3,18 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V12</title>
+    <title>MTG Sniper V13</title>
     
     <script>
         window.onerror = function(msg, url, line) {
-            document.body.innerHTML = `
-                <div style="padding:20px; color:white; background:red; font-family:sans-serif;">
-                    <h1>ERROR CRÍTICO JS</h1>
-                    <p>${msg}</p>
-                    <p>Línea: ${line}</p>
-                    <button onclick="localStorage.clear(); location.reload()" style="padding:10px; background:white; color:red; border:none; border-radius:5px; margin-top:10px; font-weight:bold;">RESET DE EMERGENCIA</button>
-                </div>
-            `;
+            // Solo mostramos el error si no es un error de "ResizeObserver" (que es inofensivo en móviles)
+            if (!msg.includes("ResizeObserver")) {
+                alert("ERROR JS (Línea " + line + "):\n" + msg);
+            }
         };
     </script>
 
@@ -23,6 +19,42 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
+    <script>
+        // Definimos las funciones de Login AQUÍ ARRIBA para que existan siempre
+        window.manualLogin = function() {
+            const u = document.getElementById('input-url').value.trim();
+            const k = document.getElementById('input-key').value.trim();
+            
+            if (!u || !k) {
+                alert("Por favor, rellena URL y Key.");
+                return;
+            }
+
+            try {
+                // Guardamos
+                localStorage.setItem('sb_url', u);
+                localStorage.setItem('sb_key', k);
+                
+                // Feedback visual
+                const btn = document.getElementById('btn-login');
+                btn.innerText = "Guardado. Recargando...";
+                btn.disabled = true;
+
+                // Recarga limpia
+                setTimeout(() => window.location.reload(), 500);
+            } catch (e) {
+                alert("Error guardando claves: " + e.message);
+            }
+        };
+
+        window.doLogout = function() {
+            if(confirm("¿Borrar claves y salir?")) {
+                localStorage.clear();
+                window.location.reload();
+            }
+        };
+    </script>
     
     <style>
         body { -webkit-tap-highlight-color: transparent; }
@@ -43,13 +75,13 @@
 
     <div id="config-screen" class="fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar V12</h2>
-            <div id="login-msg" class="hidden mb-3 p-2 text-xs rounded bg-red-100 text-red-700 text-center font-bold"></div>
+            <h2 class="text-xl font-bold text-center mb-4">Conectar V13</h2>
+            <p class="text-xs text-gray-500 mb-4 text-center">Introduce tus credenciales de Supabase.</p>
             
             <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
             <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
             
-            <button id="btn-login" onclick="manualLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition">
+            <button id="btn-login" onclick="window.manualLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition">
                 Entrar
             </button>
         </div>
@@ -60,9 +92,8 @@
         <div class="mb-4 pt-2 flex flex-col gap-3">
             <div class="flex justify-between items-center px-1">
                 <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
-                <button onclick="doLogout()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
+                <button onclick="window.doLogout()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
             </div>
-            
             <div class="relative w-full z-50">
                 <input type="text" id="search-input" class="w-full p-3 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none" placeholder="Buscar carta..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
@@ -115,69 +146,45 @@
     </div>
 
     <script>
-        // VARIABLES GLOBALES
         let sb = null;
-        let currentMode = 'arbitrage';
-        let currentData = [];
+        let mode = 'arbitrage';
+        let dataList = [];
         let searchTimer = null;
         let chartInstance = null;
 
-        // --- ARRANQUE AUTOMÁTICO ---
+        // AL CARGAR: Comprobar si hay sesión
         window.addEventListener('load', () => {
             const u = localStorage.getItem('sb_url');
             const k = localStorage.getItem('sb_key');
 
             if (u && k) {
-                // Intentar Autologin
-                initSupabase(u, k);
+                // Hay claves: Ocultamos login y arrancamos
+                document.getElementById('config-screen').classList.add('hidden');
+                document.getElementById('main-screen').classList.remove('hidden');
+                initApp(u, k);
             } else {
-                // Quedarse en Login (que ya es visible por defecto)
-                console.log("Esperando login manual...");
+                // No hay claves: El login ya está visible
+                document.getElementById('config-screen').classList.remove('hidden');
             }
         });
 
-        // --- INICIALIZAR SUPABASE ---
-        function initSupabase(url, key) {
+        function initApp(url, key) {
+            if (typeof window.supabase === 'undefined') {
+                alert("Error: Supabase JS no cargado. Revisa tu conexión.");
+                return;
+            }
             try {
-                if (typeof window.supabase === 'undefined') throw new Error("Librería no cargada");
-                
                 sb = window.supabase.createClient(url, key);
-                
-                // Si llegamos aquí, ocultamos login y mostramos app
-                document.getElementById('config-screen').classList.add('hidden');
-                document.getElementById('main-screen').classList.remove('hidden');
-                
-                // Arrancar listeners
                 initSearchListener();
                 loadData();
-
             } catch (e) {
-                document.getElementById('login-msg').innerText = "Error init: " + e.message;
-                document.getElementById('login-msg').classList.remove('hidden');
-                document.getElementById('config-screen').classList.remove('hidden');
+                alert("Error iniciando cliente: " + e.message);
             }
-        }
-
-        // --- LOGIN MANUAL ---
-        function manualLogin() {
-            const u = document.getElementById('input-url').value.trim();
-            const k = document.getElementById('input-key').value.trim();
-            if (!u || !k) return alert("Faltan datos");
-            
-            localStorage.setItem('sb_url', u);
-            localStorage.setItem('sb_key', k);
-            
-            // Recargar para limpiar estado
-            location.reload();
-        }
-
-        function doLogout() {
-            if(confirm("¿Salir?")) { localStorage.clear(); location.reload(); }
         }
 
         // --- CARGA DE DATOS ---
         async function loadData() {
-            if (currentMode === 'search') return;
+            if (mode === 'search') return;
 
             const status = document.getElementById('status-text');
             status.innerText = "Cargando...";
@@ -188,18 +195,18 @@
             document.getElementById('view-mode-indicator').innerText = "Vista: Tabla";
 
             let rpc = '', metricName = '';
-            if (currentMode === 'arbitrage') { rpc = 'get_arbitrage_opportunities'; metricName = 'Gap'; }
-            else if (currentMode === 'trend') { rpc = 'get_us_spikes'; metricName = 'Subida %'; }
-            else if (currentMode === 'demand') { rpc = 'get_demand_spikes'; metricName = 'Demanda 7d'; }
+            if (mode === 'arbitrage') { rpc = 'get_arbitrage_opportunities'; metricName = 'Gap'; }
+            else if (mode === 'trend') { rpc = 'get_us_spikes'; metricName = 'Subida %'; }
+            else if (mode === 'demand') { rpc = 'get_demand_spikes'; metricName = 'Demanda 7d'; }
 
             try {
                 const { data, error } = await sb.rpc(rpc);
                 if (error) throw error;
 
-                currentData = data || [];
-                if (currentMode !== 'demand') currentData.sort((a,b) => b.ratio - a.ratio);
+                dataList = data || [];
+                if (mode !== 'demand') dataList.sort((a,b) => b.ratio - a.ratio);
 
-                status.innerText = `${currentData.length} resultados`;
+                status.innerText = `${dataList.length} resultados`;
                 status.className = "text-sm font-bold text-green-600";
                 document.getElementById('col-metric').innerText = metricName;
                 
@@ -208,7 +215,12 @@
             } catch (e) {
                 status.innerText = "Error API";
                 status.className = "text-sm font-bold text-red-600";
-                console.error(e);
+                console.error("Error cargando datos:", e);
+                // Si falla por autenticación, quizás las claves son viejas
+                if(e.message.includes("JWT") || e.message.includes("apikey")) {
+                    alert("Tus claves parecen haber caducado o son incorrectas.");
+                    window.doLogout();
+                }
             }
         }
 
@@ -217,15 +229,15 @@
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
 
-            if (currentData.length === 0) {
+            if (dataList.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`;
                 return;
             }
 
-            currentData.forEach((item, i) => {
+            dataList.forEach((item, i) => {
                 let val, color;
-                if (currentMode === 'arbitrage') { val = item.ratio.toFixed(2)+'x'; color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; }
-                else if (currentMode === 'trend') { val = '+'+item.ratio.toFixed(0)+'%'; color = 'ratio-high'; }
+                if (mode === 'arbitrage') { val = item.ratio.toFixed(2)+'x'; color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; }
+                else if (mode === 'trend') { val = '+'+item.ratio.toFixed(0)+'%'; color = 'ratio-high'; }
                 else { val = '+'+Math.round(item.ratio)+'%'; color = 'bg-amber-100 text-amber-800 border border-amber-200'; }
 
                 const rankChange = item.rank_change || 0;
@@ -301,7 +313,7 @@
             document.getElementById('table-view').classList.add('hidden');
             const cardView = document.getElementById('cards-view');
             cardView.classList.remove('hidden');
-            cardView.innerHTML = ''; 
+            cardView.innerHTML = '';
             document.getElementById('view-mode-indicator').innerText = "Vista: Ficha";
 
             ['arbitrage', 'trend', 'demand'].forEach(x => {
@@ -310,10 +322,10 @@
 
             try {
                 const { data } = await sb.rpc('search_cards', { keyword: term });
-                currentData = data || [];
-                document.getElementById('status-text').innerText = `${currentData.length} versiones`;
+                dataList = data || [];
+                document.getElementById('status-text').innerText = `${dataList.length} versiones`;
 
-                currentData.forEach((item, i) => {
+                dataList.forEach((item, i) => {
                     const card = document.createElement('div');
                     card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
                     let gapBadge = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">Gap: ${item.ratio.toFixed(2)}x</span>` : '';
@@ -346,7 +358,4 @@
                         </div>
                         <div class="bg-slate-50 p-3 border-t border-slate-100 flex justify-between items-center">
                             <button onclick="openChart(${i})" class="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">📊 Ver Gráfica</button>
-                            <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">Comprar</a>
-                        </div>
-                    `;
-                    cardView.appe
+                            <a href="${item.mkm_l

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V10</title>
+    <title>MTG Sniper V11</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -20,31 +20,30 @@
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
         .card-sheet:hover { transform: translateY(-2px); transition: transform 0.2s; }
+        .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
+        .icon-btn:hover { background-color: #e2e8f0; }
         #suggestions-list { max-height: 200px; overflow-y: auto; z-index: 50; }
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
 
-    <div id="config-screen" class="fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
+    <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar V10</h2>
-            <div id="login-msg" class="hidden mb-3 p-2 text-xs rounded bg-red-100 text-red-700 text-center font-bold"></div>
-            
+            <h2 class="text-xl font-bold text-center mb-4">Conectar V11</h2>
+            <p id="login-error" class="hidden text-red-500 text-xs text-center mb-2 font-bold"></p>
             <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
             <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
-            
-            <button id="btn-login" onclick="SYSTEM_LOGIN()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition">
-                Entrar
-            </button>
+            <button onclick="attemptLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">Entrar</button>
         </div>
     </div>
 
     <div id="main-screen" class="hidden max-w-6xl mx-auto pb-20">
+        
         <div class="mb-4 pt-2 flex flex-col gap-3">
             <div class="flex justify-between items-center px-1">
                 <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
-                <button onclick="SYSTEM_LOGOUT()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
+                <button onclick="doLogout()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
             </div>
             <div class="relative w-full z-50">
                 <input type="text" id="search-input" class="w-full p-3 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none" placeholder="Buscar carta..." autocomplete="off">
@@ -54,14 +53,14 @@
         </div>
 
         <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
-            <button onclick="setMode('arbitrage')" id="btn-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab">Arbitraje</button>
-            <button onclick="setMode('trend')" id="btn-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab">Tendencias</button>
-            <button onclick="setMode('demand')" id="btn-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab">Demanda</button>
+            <button onclick="switchMode('arbitrage')" id="btn-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab">Arbitraje</button>
+            <button onclick="switchMode('trend')" id="btn-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab">Tendencias</button>
+            <button onclick="switchMode('demand')" id="btn-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab">Demanda</button>
         </div>
 
         <div class="flex justify-between items-center mb-4 px-1">
             <p class="text-sm font-bold text-indigo-600" id="status-text">Iniciando...</p>
-            <div id="view-mode-indicator" class="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">Vista: Tabla</div>
+            <div id="view-mode-indicator" class="text-xs bg-gray-200 px-2 py-1 rounded text-gray-600">Tabla</div>
         </div>
 
         <div id="table-view" class="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 min-h-[200px]">
@@ -98,140 +97,133 @@
     </div>
 
     <script>
-        // Función Global de Login
-        window.SYSTEM_LOGIN = function() {
-            const btn = document.getElementById('btn-login');
-            const msg = document.getElementById('login-msg');
-            const u = document.getElementById('input-url').value.trim();
-            const k = document.getElementById('input-key').value.trim();
-
-            if (!u || !k) {
-                msg.innerText = "Faltan datos";
-                msg.classList.remove('hidden');
-                return;
-            }
-
-            btn.innerText = "Verificando...";
-            btn.disabled = true;
-
-            // Verificación simple: ¿Existe Supabase?
-            if (typeof window.supabase === 'undefined') {
-                msg.innerText = "Error: Librería no cargada. Revisa internet.";
-                msg.classList.remove('hidden');
-                btn.disabled = false;
-                return;
-            }
-
-            try {
-                // Intentamos conectar
-                const tempClient = window.supabase.createClient(u, k);
-                // Ping simple
-                tempClient.from('cards').select('id').limit(1).then(({ error }) => {
-                    if (error) {
-                        throw error;
-                    }
-                    // ÉXITO
-                    localStorage.setItem('sb_url', u);
-                    localStorage.setItem('sb_key', k);
-                    location.reload(); // Recarga limpia
-                }).catch(err => {
-                    msg.innerText = "Error conexión: " + err.message;
-                    msg.classList.remove('hidden');
-                    btn.innerText = "Entrar";
-                    btn.disabled = false;
-                });
-            } catch (e) {
-                msg.innerText = "Error crítico: " + e.message;
-                msg.classList.remove('hidden');
-                btn.disabled = false;
-            }
-        };
-
-        window.SYSTEM_LOGOUT = function() {
-            if(confirm("¿Salir?")) { localStorage.clear(); location.reload(); }
-        };
-
-        // Autologin al inicio
-        (function() {
-            const u = localStorage.getItem('sb_url');
-            const k = localStorage.getItem('sb_key');
-            if (u && k) {
-                document.getElementById('config-screen').classList.add('hidden');
-                document.getElementById('main-screen').classList.remove('hidden');
-                // Disparamos evento para iniciar la app principal
-                setTimeout(() => window.dispatchEvent(new Event('APP_READY')), 100);
-            } else {
-                document.getElementById('config-screen').classList.remove('hidden');
-            }
-        })();
-    </script>
-
-    <script>
+        // Variables Globales
         let sb = null;
-        let mode = 'arbitrage';
-        let dataList = [];
+        let currentMode = 'arbitrage';
+        let currentData = [];
         let searchTimer = null;
         let chartInstance = null;
 
-        window.addEventListener('APP_READY', () => {
+        // 1. AL CARGAR LA PÁGINA
+        window.addEventListener('DOMContentLoaded', () => {
             const url = localStorage.getItem('sb_url');
             const key = localStorage.getItem('sb_key');
-            
-            try {
-                sb = window.supabase.createClient(url, key);
-                initSearch();
-                loadData();
-            } catch (e) {
-                alert("Error iniciando App: " + e.message);
-                localStorage.clear();
-                location.reload();
+
+            if (!url || !key) {
+                // No hay claves: Mostrar Login
+                document.getElementById('config-screen').classList.remove('hidden');
+            } else {
+                // Hay claves: Iniciar App
+                startApp(url, key);
             }
         });
 
-        // --- CARGA DE DATOS ---
+        // 2. FUNCIÓN DE ARRANQUE (Se llama tras login o autologin)
+        function startApp(url, key) {
+            document.getElementById('config-screen').classList.add('hidden');
+            document.getElementById('main-screen').classList.remove('hidden');
+
+            try {
+                if (typeof window.supabase === 'undefined') throw new Error("Librería Supabase no cargada");
+                
+                sb = window.supabase.createClient(url, key);
+                
+                // Iniciar listeners
+                initSearchListener();
+                
+                // Cargar datos iniciales
+                loadData();
+
+            } catch (e) {
+                alert("Error crítico: " + e.message);
+                localStorage.clear();
+                window.location.reload();
+            }
+        }
+
+        // 3. LOGIN MANUAL
+        async function attemptLogin() {
+            const u = document.getElementById('input-url').value.trim();
+            const k = document.getElementById('input-key').value.trim();
+            const errBox = document.getElementById('login-error');
+
+            if (!u || !k) { errBox.innerText = "Faltan datos"; errBox.classList.remove('hidden'); return; }
+
+            // Prueba de conexión
+            try {
+                const tempClient = window.supabase.createClient(u, k);
+                const { error } = await tempClient.from('cards').select('id').limit(1);
+                
+                if (error) throw error;
+
+                // Éxito
+                localStorage.setItem('sb_url', u);
+                localStorage.setItem('sb_key', k);
+                startApp(u, k); // Arrancar sin recargar
+
+            } catch (e) {
+                errBox.innerText = "Error: " + e.message;
+                errBox.classList.remove('hidden');
+            }
+        }
+
+        function doLogout() {
+            if(confirm("¿Salir?")) { localStorage.clear(); location.reload(); }
+        }
+
+        // 4. LÓGICA DE DATOS
         async function loadData() {
-            if (mode === 'search') return;
+            if (currentMode === 'search') return;
 
             const status = document.getElementById('status-text');
             status.innerText = "Cargando...";
             status.className = "text-sm font-bold text-indigo-600 animate-pulse";
             
+            // UI Reset
             document.getElementById('table-view').classList.remove('hidden');
             document.getElementById('cards-view').classList.add('hidden');
             document.getElementById('view-mode-indicator').innerText = "Vista: Tabla";
 
             let rpc = '', metricName = '';
-            if (mode === 'arbitrage') { rpc = 'get_arbitrage_opportunities'; metricName = 'Gap'; }
-            else if (mode === 'trend') { rpc = 'get_us_spikes'; metricName = 'Subida %'; }
-            else if (mode === 'demand') { rpc = 'get_demand_spikes'; metricName = 'Demanda 7d'; }
+            if (currentMode === 'arbitrage') { rpc = 'get_arbitrage_opportunities'; metricName = 'Gap'; }
+            else if (currentMode === 'trend') { rpc = 'get_us_spikes'; metricName = 'Subida %'; }
+            else if (currentMode === 'demand') { rpc = 'get_demand_spikes'; metricName = 'Demanda 7d'; }
 
-            const { data, error } = await sb.rpc(rpc);
+            try {
+                const { data, error } = await sb.rpc(rpc);
+                if (error) throw error;
 
-            if (error) {
+                currentData = data || [];
+                // Ordenar (Demanda ya viene ordenada)
+                if (currentMode !== 'demand') currentData.sort((a,b) => b.ratio - a.ratio);
+
+                status.innerText = `${currentData.length} resultados`;
+                status.className = "text-sm font-bold text-green-600";
+                document.getElementById('col-metric').innerText = metricName;
+                
+                renderTable();
+
+            } catch (e) {
                 status.innerText = "Error API";
                 status.className = "text-sm font-bold text-red-600";
-                return;
+                document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center p-4 text-red-500">${e.message}</td></tr>`;
             }
-
-            dataList = data || [];
-            if (mode !== 'demand') dataList.sort((a,b) => b.ratio - a.ratio);
-
-            status.innerText = `${dataList.length} resultados`;
-            status.className = "text-sm font-bold text-green-600";
-            document.getElementById('col-metric').innerText = metricName;
-            
-            renderTable();
         }
 
-        // --- RENDERIZADO TABLA ---
+        // 5. RENDERIZADO TABLA
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
 
-            dataList.forEach((item, i) => {
+            if (currentData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`;
+                return;
+            }
+
+            currentData.forEach((item, i) => {
                 let val, color;
-                if (mode === 'arbitrage') { val = item.ratio.toFixed(2)+'x'; color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; }
-                else if (mode === 'trend') { val = '+'+item.ratio.toFixed(0)+'%'; color = 'ratio-high'; }
+                if (currentMode === 'arbitrage') { val = item.ratio.toFixed(2)+'x'; color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; }
+                else if (currentMode === 'trend') { val = '+'+item.ratio.toFixed(0)+'%'; color = 'ratio-high'; }
                 else { val = '+'+Math.round(item.ratio)+'%'; color = 'bg-amber-100 text-amber-800 border border-amber-200'; }
 
                 const rankChange = item.rank_change || 0;
@@ -265,8 +257,87 @@
             });
         }
 
-        // --- BÚSQUEDA ---
-        function initSearch() {
+        // 6. RENDERIZADO FICHAS (BÚSQUEDA)
+        async function doSearch(term) {
+            document.getElementById('suggestions-list').classList.add('hidden');
+            document.getElementById('search-input').value = term;
+            document.getElementById('status-text').innerText = "Buscando...";
+            
+            // Cambio de vista
+            document.getElementById('table-view').classList.add('hidden');
+            const cardView = document.getElementById('cards-view');
+            cardView.classList.remove('hidden');
+            cardView.innerHTML = '';
+            document.getElementById('view-mode-indicator').innerText = "Vista: Ficha";
+
+            // Desmarcar tabs
+            ['arbitrage', 'trend', 'demand'].forEach(x => {
+                document.getElementById('btn-'+x).className = 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
+            });
+
+            try {
+                const { data, error } = await sb.rpc('search_cards', { keyword: term });
+                if (error) throw error;
+
+                currentData = data || [];
+                document.getElementById('status-text').innerText = `${currentData.length} versiones`;
+
+                currentData.forEach((item, i) => {
+                    const card = document.createElement('div');
+                    card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
+                    let gapBadge = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">Gap: ${item.ratio.toFixed(2)}x</span>` : '';
+
+                    card.innerHTML = `
+                        <div class="flex flex-row p-4 gap-4 items-start">
+                            <div class="w-1/3 min-w-[100px] cursor-pointer" onclick="openImage('${item.image_uri}', event)">
+                                <img src="${item.image_uri}" class="w-full rounded-lg shadow-md hover:opacity-90 transition">
+                            </div>
+                            <div class="w-2/3 flex flex-col gap-2">
+                                <div>
+                                    <h3 class="font-black text-lg leading-tight text-slate-800">${item.name}</h3>
+                                    <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">${item.set_code}</div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <div class="bg-slate-50 p-2 rounded border border-slate-100 text-center">
+                                        <div class="text-[10px] text-slate-400 uppercase font-bold">EUR</div>
+                                        <div class="font-mono font-bold text-lg text-slate-700">${(item.eur||0).toFixed(2)}€</div>
+                                    </div>
+                                    <div class="bg-slate-50 p-2 rounded border border-slate-100 text-center">
+                                        <div class="text-[10px] text-slate-400 uppercase font-bold">USD</div>
+                                        <div class="font-mono font-bold text-lg text-slate-500">$${(item.usd||0).toFixed(2)}</div>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center mt-2">
+                                    <div class="text-xs text-slate-500 font-mono">Rank: #${item.edhrec_rank||'?'}</div>
+                                    ${gapBadge}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-3 border-t border-slate-100 flex justify-between items-center">
+                            <button onclick="openChart(${i})" class="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">📊 Ver Gráfica</button>
+                            <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">Comprar</a>
+                        </div>
+                    `;
+                    cardView.appendChild(card);
+                });
+            } catch (e) {
+                alert("Error búsqueda: " + e.message);
+            }
+        }
+
+        // 7. FUNCIONES UI
+        function switchMode(m) {
+            currentMode = m;
+            ['arbitrage', 'trend', 'demand'].forEach(x => {
+                const b = document.getElementById('btn-'+x);
+                b.className = (x === m) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
+            });
+            document.getElementById('suggestions-list').classList.add('hidden');
+            document.getElementById('search-input').value = '';
+            loadData();
+        }
+
+        function initSearchListener() {
             const input = document.getElementById('search-input');
             const list = document.getElementById('suggestions-list');
 
@@ -283,81 +354,4 @@
                     list.innerHTML = '';
                     uniques.forEach(name => {
                         const li = document.createElement('li');
-                        li.className = 'p-3 border-b text-sm font-medium hover:bg-indigo-50 cursor-pointer flex items-center gap-2';
-                        li.innerHTML = `<span class="text-indigo-400">🔍</span> ${name}`;
-                        li.onclick = () => doSearch(name);
-                        list.appendChild(li);
-                    });
-                    list.classList.remove('hidden');
-                }, 300);
-            });
-            
-            document.addEventListener('click', (e) => {
-                if(!input.contains(e.target) && !list.contains(e.target)) list.classList.add('hidden');
-            });
-        }
-
-        async function doSearch(term) {
-            document.getElementById('suggestions-list').classList.add('hidden');
-            document.getElementById('search-input').value = term;
-            document.getElementById('status-text').innerText = "Buscando...";
-            
-            document.getElementById('table-view').classList.add('hidden');
-            const cardView = document.getElementById('cards-view');
-            cardView.classList.remove('hidden');
-            cardView.innerHTML = ''; 
-            document.getElementById('view-mode-indicator').innerText = "Vista: Ficha";
-
-            ['arbitrage', 'trend', 'demand'].forEach(x => {
-                document.getElementById('btn-'+x).className = 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
-            });
-
-            const { data } = await sb.rpc('search_cards', { keyword: term });
-            dataList = data || [];
-            document.getElementById('status-text').innerText = `${dataList.length} versiones`;
-
-            dataList.forEach((item, i) => {
-                const card = document.createElement('div');
-                card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
-                let gapBadge = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">Gap: ${item.ratio.toFixed(2)}x</span>` : '';
-
-                card.innerHTML = `
-                    <div class="flex flex-row p-4 gap-4 items-start">
-                        <div class="w-1/3 min-w-[100px] cursor-pointer" onclick="openImage('${item.image_uri}', event)">
-                            <img src="${item.image_uri}" class="w-full rounded-lg shadow-md hover:opacity-90 transition">
-                        </div>
-                        <div class="w-2/3 flex flex-col gap-2">
-                            <div>
-                                <h3 class="font-black text-lg leading-tight text-slate-800">${item.name}</h3>
-                                <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">${item.set_code}</div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2 mt-2">
-                                <div class="bg-slate-50 p-2 rounded border border-slate-100 text-center">
-                                    <div class="text-[10px] text-slate-400 uppercase font-bold">EUR</div>
-                                    <div class="font-mono font-bold text-lg text-slate-700">${(item.eur||0).toFixed(2)}€</div>
-                                </div>
-                                <div class="bg-slate-50 p-2 rounded border border-slate-100 text-center">
-                                    <div class="text-[10px] text-slate-400 uppercase font-bold">USD</div>
-                                    <div class="font-mono font-bold text-lg text-slate-500">$${(item.usd||0).toFixed(2)}</div>
-                                </div>
-                            </div>
-                            <div class="flex justify-between items-center mt-2">
-                                <div class="text-xs text-slate-500 font-mono">Rank: #${item.edhrec_rank||'?'}</div>
-                                ${gapBadge}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-slate-50 p-3 border-t border-slate-100 flex justify-between items-center">
-                        <button onclick="openChart(${i})" class="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">📊 Ver Gráfica</button>
-                        <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">Comprar</a>
-                    </div>
-                `;
-                cardView.appendChild(card);
-            });
-        }
-
-        function setMode(m) {
-            mode = m;
-            ['arbitrage', 'trend', 'demand'].forEach(x => {
-                const b = document.getElementById('btn-'+x);
-                b.className = (x === m) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab' : 'flex-1 py-3 px-2 text-xs font-bold uppercase in
+                        li.className = 'p-3 border-b text-sm 

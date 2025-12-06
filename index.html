@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V19 Modular</title>
+    <title>MTG Sniper V20</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -26,26 +26,26 @@
 
     <div id="main-screen" class="hidden max-w-6xl mx-auto pb-24">
         
-        <div class="mb-4 pt-2 flex flex-col gap-3">
+        <div class="mb-4 pt-2 flex flex-col gap-3 sticky top-0 bg-slate-50 z-40 pb-2 shadow-sm">
             <div class="flex justify-between items-center px-2">
                 <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
-                <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
+                <button onclick="resetConfig()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
             </div>
         </div>
 
-        <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
+        <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto mx-1">
             <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap">⚖️ Arbitraje</button>
             <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🚀 Tendencias</button>
             <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📈 Demanda</button>
             <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
         </div>
 
-        <div id="status-bar" class="flex justify-between items-center mb-4 px-1">
-            <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
+        <div id="status-bar" class="flex justify-between items-center mb-4 px-2">
+            <p class="text-xs text-slate-500 font-bold" id="status-text">Iniciando...</p>
             <button id="copy-btn" onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar</button>
         </div>
 
-        <div id="view-table" class="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
+        <div id="view-table" class="mx-1 bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
                     <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold">
@@ -57,7 +57,7 @@
                             <th class="px-4 py-3 text-center" id="col-metric">Gap</th>
                             <th class="px-4 py-3 text-center">Rank</th>
                             <th class="px-4 py-3 text-center">Var.</th>
-                            <th class="px-4 py-3 text-center">Acc</th>
+                            <th class="px-4 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -65,30 +65,34 @@
             </div>
         </div>
 
-        <div id="view-search" class="hidden flex flex-col gap-4 px-1">
+        <div id="view-search" class="hidden flex flex-col gap-4 px-2">
             <div class="relative z-50">
                 <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-lg font-bold" placeholder="Escribe carta..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
                 <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 divide-y divide-slate-100"></ul>
             </div>
-            <div id="search-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            <div id="search-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20"></div>
             <p id="search-placeholder" class="text-center text-slate-400 py-10">Usa el buscador superior.</p>
         </div>
 
-        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en la foto para ampliar.</p>
     </div>
 
-    <div id="chart-modal" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onclick="document.getElementById('chart-modal').classList.add('hidden')">
-        <div class="bg-white rounded-xl w-full max-w-3xl p-4 relative" onclick="event.stopPropagation()">
-            <h3 id="modal-title" class="font-bold text-lg mb-4">Historial</h3>
-            <div class="h-64 md:h-80"><canvas id="priceChart"></canvas></div>
+    <div id="chart-modal" class="hidden fixed inset-0 bg-black bg-opacity-90 z-[3000] flex items-center justify-center p-4" onclick="document.getElementById('chart-modal').classList.add('hidden')">
+        <div class="bg-white rounded-xl w-full max-w-3xl p-4 relative h-80 flex flex-col" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-2">
+                <h3 id="modal-title" class="font-bold text-lg">Historial</h3>
+                <button onclick="document.getElementById('chart-modal').classList.add('hidden')" class="text-2xl leading-none text-slate-400">&times;</button>
+            </div>
+            <div class="flex-1 relative w-full">
+                <canvas id="priceChart"></canvas>
+            </div>
         </div>
     </div>
-    <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
+
+    <div id="image-modal" class="hidden fixed inset-0 bg-black bg-opacity-95 z-[3000] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
         <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg">
     </div>
 
     <script src="app.js"></script>
 </body>
-        </html>
-
+</html>

@@ -22,10 +22,10 @@
         .inactive-tab { color: #64748b; }
         
         /* Flechas de Rank */
-        .rank-up { color: #10b981; } /* Verde para mejora (número más bajo) */
-        .rank-down { color: #ef4444; } /* Rojo para empeoramiento (número más alto) */
+        .rank-up { color: #10b981; } /* Verde */
+        .rank-down { color: #ef4444; } /* Rojo */
 
-        /* Iconos de acción */
+        /* Iconos */
         .icon-group { display: flex; gap: 4px; justify-content: center; }
         .icon-btn { opacity: 0.8; transition: all 0.2s; width: 32px; height: 32px; border-radius: 8px; justify-content: center; align-items: center; }
         .icon-btn:hover { opacity: 1; background-color: #e2e8f0; }
@@ -47,14 +47,14 @@
     <div id="chart-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onclick="closeModal(event)">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden relative" onclick="event.stopPropagation()">
             <div class="p-4 border-b flex justify-between items-center bg-slate-50">
-                <h3 id="modal-title" class="font-bold text-lg">Historial de Precio y Tendencia</h3>
+                <h3 id="modal-title" class="font-bold text-lg">Historial</h3>
                 <button onclick="document.getElementById('chart-modal').classList.add('hidden')" class="text-2xl leading-none text-slate-400 hover:text-slate-600">&times;</button>
             </div>
             <div class="p-4 h-64 md:h-80">
                 <canvas id="priceChart"></canvas>
             </div>
             <div class="p-4 bg-slate-50 text-xs text-center text-slate-500">
-                Gráfica: Compara la demanda (Rank) con el precio. Rank es invertido (más bajo es mejor).
+                Línea Azul: USA | Línea Verde: EUR | Puntos Morados: Rank (Más bajo es mejor)
             </div>
         </div>
     </div>
@@ -102,7 +102,7 @@
             </div>
         </div>
         
-        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en cualquier foto para ampliarla.</p>
+        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en la foto para ampliar.</p>
     </div>
 
     <script>
@@ -123,55 +123,58 @@
             }
         }
 
-        // --- COMIENZO DE CÓDIGO JS A REEMPLAZAR EN INDEX.HTML ---
+        async function loadData() {
+            document.getElementById('status-text').innerText = "Cargando...";
+            
+            let query;
+            let metricLabel;
 
-async function loadData() {
-    document.getElementById('status-text').innerText = "Cargando...";
-    let rpcName;
-    let metricLabel;
-    
-    // Nueva lógica: Llamamos a get_demand_spikes
-    if (currentMode === 'arbitrage') {
-        rpcName = 'get_arbitrage_opportunities';
-        metricLabel = 'Gap';
-    } else if (currentMode === 'trend') {
-        rpcName = 'get_us_spikes';
-        metricLabel = 'Subida %';
-    } else if (currentMode === 'demand') {
-        rpcName = 'get_demand_spikes'; // <--- CAMBIO DE FUNCIÓN
-        metricLabel = 'Demanda 7d';
-    }
+            // --- LÓGICA HÍBRIDA (LA SOLUCIÓN A TU ERROR) ---
+            if (currentMode === 'arbitrage') {
+                // Modo 1: Usa Función RPC
+                query = supabase.rpc('get_arbitrage_opportunities');
+                metricLabel = 'Gap';
+            } else if (currentMode === 'trend') {
+                // Modo 2: Usa Función RPC
+                query = supabase.rpc('get_us_spikes');
+                metricLabel = 'Subida %';
+            } else if (currentMode === 'demand') {
+                // Modo 3: LECTURA DIRECTA DE TABLA (Sin RPC, sin error de caché)
+                query = supabase
+                    .from('edhrec_demand_spikes')
+                    .select('*')
+                    .order('ratio', { ascending: false });
+                metricLabel = 'Demanda 7d';
+            }
 
-    const { data, error } = await supabase.rpc(rpcName);
-    
-    if (error) { 
-        alert("Error API: " + error.message + " - Verifica la función RPC '" + rpcName + "' y las vistas SQL."); 
-        return; 
-    }
-    
-    currentData = data.sort((a, b) => b.ratio - a.ratio);
-    document.getElementById('status-text').innerText = `${data.length} resultados`;
-    
-    document.getElementById('col-metric').innerText = metricLabel;
-    renderTable();
-}
+            const { data, error } = await query;
+            
+            if (error) { 
+                alert("Error: " + error.message); 
+                return; 
+            }
+            
+            // Ordenación manual para los modos RPC (Demand ya viene ordenado por SQL)
+            if (currentMode !== 'demand') {
+                currentData = data.sort((a, b) => b.ratio - a.ratio);
+            } else {
+                currentData = data;
+            }
 
-function switchMode(mode) {
-    currentMode = mode;
-    document.getElementById('tab-arbitrage').className = mode === 'arbitrage' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
-    document.getElementById('tab-trend').className = mode === 'trend' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
-    document.getElementById('tab-demand').className = mode === 'demand' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
-    loadData();
-}
-
-// --- FIN DE CÓDIGO JS A REEMPLAZAR ---
-        
+            document.getElementById('status-text').innerText = `${data.length} resultados`;
+            document.getElementById('col-metric').innerText = metricLabel;
+            renderTable();
+        }
 
         function switchMode(mode) {
             currentMode = mode;
-            document.getElementById('tab-arbitrage').className = mode === 'arbitrage' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
-            document.getElementById('tab-trend').className = mode === 'trend' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
-            document.getElementById('tab-demand').className = mode === 'demand' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
+            // Actualizar estilo de pestañas
+            ['arbitrage', 'trend', 'demand'].forEach(m => {
+                const tab = document.getElementById(`tab-${m}`);
+                tab.className = (m === mode) 
+                    ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' 
+                    : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
+            });
             loadData();
         }
 
@@ -182,10 +185,9 @@ function switchMode(mode) {
             if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Nada hoy.</td></tr>`; return; }
 
             currentData.forEach((item, index) => {
-                let metricValue;
-                let metricClass;
+                // Formateo de métrica según modo
+                let metricValue, metricClass;
                 
-                // Lógica de Métrica para la columna principal
                 if (currentMode === 'arbitrage') {
                     metricValue = item.ratio.toFixed(2) + 'x';
                     metricClass = item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high';
@@ -197,7 +199,9 @@ function switchMode(mode) {
                     metricClass = 'ratio-extreme'; 
                 }
                 
-                // Lógica de Rank Change (Var. 1D)
+                // Formateo de Rank y Variación
+                const currentRank = item.edhrec_rank && item.edhrec_rank > 0 ? `#${item.edhrec_rank}` : '—';
+                
                 const rankChange = item.rank_change || 0;
                 let rankChangeText = '—';
                 let rankChangeClass = 'text-slate-400';
@@ -210,10 +214,7 @@ function switchMode(mode) {
                     rankChangeClass = 'rank-down';
                 }
                 
-                // Limpieza de Rank Actual
-                const currentRank = item.edhrec_rank && item.edhrec_rank > 0 ? `#${item.edhrec_rank}` : '—';
-                
-                // URLs y Limpieza
+                // URLs
                 const cleanNameUrl = item.name.replace(/ /g, '-').replace(/'/g, '').replace(/\/\/.*/, '');
                 const mkmLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanNameUrl}?language=1&minCondition=3`;
                 const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
@@ -259,22 +260,22 @@ function switchMode(mode) {
             });
         }
 
-        // --- FUNCIONES DE GRÁFICAS Y UTILIDADES ---
+        // --- GRÁFICAS Y MODALES ---
         async function showChart(index) {
             const item = currentData[index];
-            document.getElementById('modal-title').innerText = item.name + " (Historial de 30 Días)";
+            document.getElementById('modal-title').innerText = item.name + " (Historial 30 Días)";
             document.getElementById('chart-modal').classList.remove('hidden');
             
             if (chartInstance) chartInstance.destroy();
 
+            // Llamada a RPC para historial
             const { data: history, error } = await supabase.rpc('get_card_history', { 
                 target_card_name: item.name, 
                 target_set_code: item.set_code 
             });
 
             if (error || !history || history.length === 0) {
-                document.getElementById('modal-title').innerText = item.name + " (Sin Historial Disponible)";
-                document.getElementById('chart-modal').classList.remove('hidden'); // Mantener modal abierto con mensaje
+                document.getElementById('modal-title').innerText = item.name + " (Sin datos históricos)";
                 return; 
             }
 
@@ -301,8 +302,8 @@ function switchMode(mode) {
                     interaction: { mode: 'index', intersect: false }, 
                     plugins: { legend: { position: 'top' } }, 
                     scales: { 
-                        'y-price': { beginAtZero: false, position: 'left', title: { display: true, text: 'Precio (€/$)' } },
-                        'y-rank': { beginAtZero: false, position: 'right', reverse: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Rank (Bajo = Mejor)' } }
+                        'y-price': { beginAtZero: false, position: 'left', title: { display: true, text: 'Precio' } },
+                        'y-rank': { beginAtZero: false, position: 'right', reverse: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Rank (Bajo=Mejor)' } }
                     }
                 }
             });
@@ -314,22 +315,18 @@ function switchMode(mode) {
             document.getElementById('image-modal').classList.remove('hidden');
         }
 
-        function closeImageModal() {
-            document.getElementById('image-modal').classList.add('hidden');
-        }
-
+        function closeImageModal() { document.getElementById('image-modal').classList.add('hidden'); }
         function closeModal(e) { if (e.target.id === 'chart-modal') document.getElementById('chart-modal').classList.add('hidden'); }
         function saveConfig() { localStorage.setItem('supabase_url', document.getElementById('input-url').value.trim()); localStorage.setItem('supabase_key', document.getElementById('input-key').value.trim()); location.reload(); }
-        function resetConfig() { if(confirm("¿Borrar claves y configuración?")) { localStorage.clear(); location.reload(); } }
+        function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.clear(); location.reload(); } }
         
         function copyToClipboardSafe() {
             const list = currentData.slice(0, 50).map(i => `1 ${i.name.split(' // ')[0]} (${i.set_code})`).join('\n');
             const ta = document.createElement("textarea"); ta.value = list; ta.style.position="fixed"; ta.style.left="-9999px"; document.body.appendChild(ta); ta.focus(); ta.select();
-            try { document.execCommand('copy'); Toastify({ text: "✅ Lista copiada", duration: 2000, style: { background: "#4f46e5" } }).showToast(); } catch(e){} document.body.removeChild(ta);
+            try { document.execCommand('copy'); Toastify({ text: "✅ Copiado", duration: 2000, style: { background: "#4f46e5" } }).showToast(); } catch(e){} document.body.removeChild(ta);
         }
 
         initApp();
     </script>
 </body>
-                </html>
-    
+</html>

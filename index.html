@@ -123,36 +123,49 @@
             }
         }
 
-        async function loadData() {
-            document.getElementById('status-text').innerText = "Cargando...";
-            let rpcName;
-            let metricLabel;
-            
-            if (currentMode === 'arbitrage') {
-                rpcName = 'get_arbitrage_opportunities';
-                metricLabel = 'Gap';
-            } else if (currentMode === 'trend') {
-                rpcName = 'get_us_spikes';
-                metricLabel = 'Subida %';
-            } else if (currentMode === 'demand') {
-                rpcName = 'get_rank_spikes';
-                metricLabel = 'Demanda 7d';
-            }
+        // --- COMIENZO DE CÓDIGO JS A REEMPLAZAR EN INDEX.HTML ---
 
-            const { data, error } = await supabase.rpc(rpcName);
-            
-            if (error) { 
-                alert("Error API: " + error.message + " - Verifica la función RPC '" + rpcName + "' y las vistas SQL."); 
-                return; 
-            }
-            
-            // Ordenar por métrica principal (Ratio o Growth)
-            currentData = data.sort((a, b) => b.ratio - a.ratio);
-            document.getElementById('status-text').innerText = `${data.length} resultados`;
-            
-            document.getElementById('col-metric').innerText = metricLabel;
-            renderTable();
-        }
+async function loadData() {
+    document.getElementById('status-text').innerText = "Cargando...";
+    let rpcName;
+    let metricLabel;
+    
+    // Nueva lógica: Llamamos a get_demand_spikes
+    if (currentMode === 'arbitrage') {
+        rpcName = 'get_arbitrage_opportunities';
+        metricLabel = 'Gap';
+    } else if (currentMode === 'trend') {
+        rpcName = 'get_us_spikes';
+        metricLabel = 'Subida %';
+    } else if (currentMode === 'demand') {
+        rpcName = 'get_demand_spikes'; // <--- CAMBIO DE FUNCIÓN
+        metricLabel = 'Demanda 7d';
+    }
+
+    const { data, error } = await supabase.rpc(rpcName);
+    
+    if (error) { 
+        alert("Error API: " + error.message + " - Verifica la función RPC '" + rpcName + "' y las vistas SQL."); 
+        return; 
+    }
+    
+    currentData = data.sort((a, b) => b.ratio - a.ratio);
+    document.getElementById('status-text').innerText = `${data.length} resultados`;
+    
+    document.getElementById('col-metric').innerText = metricLabel;
+    renderTable();
+}
+
+function switchMode(mode) {
+    currentMode = mode;
+    document.getElementById('tab-arbitrage').className = mode === 'arbitrage' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
+    document.getElementById('tab-trend').className = mode === 'trend' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
+    document.getElementById('tab-demand').className = mode === 'demand' ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
+    loadData();
+}
+
+// --- FIN DE CÓDIGO JS A REEMPLAZAR ---
+        
 
         function switchMode(mode) {
             currentMode = mode;

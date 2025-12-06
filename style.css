@@ -1,0 +1,29 @@
+/* ESTILOS GENERALES */
+body { -webkit-tap-highlight-color: transparent; }
+
+/* PESTAÑAS */
+.active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
+.inactive-tab { color: #64748b; }
+
+/* BADGES DE MÉTRICAS */
+.ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+.ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+
+/* VARIACIÓN DE RANK */
+.rank-up { color: #10b981; font-weight: bold; } 
+.rank-down { color: #ef4444; font-weight: bold; }
+
+/* MODAL Y BÚSQUEDA */
+#suggestions-list { max-height: 250px; overflow-y: auto; z-index: 50; }
+
+/* TARJETA DE RESULTADO DE BÚSQUEDA */
+.card-sheet { transition: transform 0.2s, box-shadow 0.2s; }
+.card-sheet:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+
+/* BOTONES DE ACCIÓN */
+.icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
+.icon-btn:hover { background-color: #e2e8f0; transform: scale(1.05); }
+
+/* UTILIDADES RESPONSIVE */
+@media (max-width: 640px) { .hide-mobile { display: none; } body { padding-bottom: 2rem; } }

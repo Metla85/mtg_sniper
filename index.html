@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V5 (Search Fix)</title>
+    <title>MTG Sniper Final</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -23,8 +23,15 @@
         .icon-group { display: flex; gap: 8px; justify-content: center; }
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.2s; }
         .icon-btn:hover { background-color: #e2e8f0; }
-        .search-input { transition: all 0.3s; }
-        .search-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+
+        /* Estilos del desplegable de sugerencias */
+        #suggestions-list {
+            max-height: 200px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .suggestion-item:hover { background-color: #f1f5f9; cursor: pointer; }
+
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -55,28 +62,31 @@
 
     <div id="main-screen" class="max-w-6xl mx-auto transition-opacity duration-500">
         
-        <div class="mb-4 pt-2 flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
-            <div class="flex justify-between items-center">
-                <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="resetSearch()">MTG Sniper</h1>
-                <button onclick="resetConfig()" class="text-xl p-2 opacity-50 md:hidden">⚙️</button>
-            </div>
-            
-            <div class="relative w-full md:w-96">
+        <div class="mb-4 pt-2 flex justify-between items-center">
+            <h1 class="text-2xl font-black tracking-tight">MTG Sniper</h1>
+            <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
+        </div>
+
+        <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
+            <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap">⚖️ Arbitraje</button>
+            <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">🚀 Tendencias</button>
+            <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">📈 Demanda</button>
+            <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
+        </div>
+
+        <div id="search-container" class="hidden mb-4 relative z-50">
+            <div class="relative">
+                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all" placeholder="Escribe el nombre de la carta (ej: Sol Ring)..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <input type="text" id="search-box" class="search-input w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium placeholder-slate-400" placeholder="Buscar carta (min 3 letras)...">
-                <button id="clear-search" onclick="resetSearch()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-red-500">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
+                <div id="search-spinner" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </div>
             </div>
-            <button onclick="resetConfig()" class="hidden md:block text-xl p-2 opacity-50">⚙️</button>
-        </div>
-
-        <div id="tabs-container" class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 transition-all duration-300">
-            <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 font-bold text-sm uppercase active-tab">⚖️ Arbitraje</button>
-            <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 font-bold text-sm uppercase inactive-tab">🚀 Tendencias</button>
-            <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 font-bold text-sm uppercase inactive-tab">📈 Demanda</button>
+            
+            <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 z-50 divide-y divide-slate-100">
+                </ul>
         </div>
 
         <div class="flex justify-between items-center mb-4 px-1">
@@ -110,90 +120,108 @@
         let supabase = null;
         let currentMode = 'arbitrage';
         let currentData = [];
+        let chartInstance = null;
         let searchTimeout = null;
-        let chartInstance = null; // Variable global para la gráfica
 
-        // Aseguramos que el DOM esté listo antes de ejecutar nada
-        window.onload = function() {
-            initApp();
-        };
+        // Inicio seguro
+        window.onload = function() { initApp(); };
 
         function initApp() {
             const url = localStorage.getItem('supabase_url');
             const key = localStorage.getItem('supabase_key');
-            
-            if (!url || !key) { 
-                document.getElementById('config-screen').classList.remove('hidden'); 
-            } else {
+            if (!url || !key) { document.getElementById('config-screen').classList.remove('hidden'); }
+            else {
                 document.getElementById('config-screen').classList.add('hidden');
-                
                 try {
-                    // Inicializar cliente Supabase
                     supabase = window.supabase.createClient(url, key);
-                    
-                    // Iniciar listeners y cargar datos
-                    setupSearch();
+                    setupAutocomplete(); // Iniciamos el listener del buscador
                     loadData();
-                } catch (e) {
-                    alert("Error crítico al iniciar: " + e.message);
-                    resetConfig();
-                }
+                } catch (e) { resetConfig(); }
             }
         }
 
-        // --- SISTEMA DE BÚSQUEDA ---
-        function setupSearch() {
-            const searchBox = document.getElementById('search-box');
-            if(!searchBox) return;
+        // --- LÓGICA DE AUTOCOMPLETADO ---
+        function setupAutocomplete() {
+            const input = document.getElementById('search-input');
+            const list = document.getElementById('suggestions-list');
+            const spinner = document.getElementById('search-spinner');
 
-            searchBox.addEventListener('input', (e) => {
+            input.addEventListener('input', (e) => {
                 const term = e.target.value.trim();
                 clearTimeout(searchTimeout);
                 
-                if (term.length >= 3) {
-                    searchTimeout = setTimeout(() => performSearch(term), 300);
-                } else if (term.length === 0) {
-                    resetSearch(false);
+                if (term.length < 3) {
+                    list.classList.add('hidden');
+                    return;
+                }
+
+                spinner.classList.remove('hidden'); // Mostrar spinner
+                searchTimeout = setTimeout(async () => {
+                    // Llamamos a la API para obtener sugerencias
+                    const { data, error } = await supabase.rpc('search_cards', { keyword: term });
+                    spinner.classList.add('hidden'); // Ocultar spinner
+
+                    if (error || !data || data.length === 0) {
+                        list.classList.add('hidden');
+                        return;
+                    }
+
+                    // Renderizar lista de sugerencias (agrupadas por nombre para no repetir)
+                    // Usamos un Set para obtener nombres únicos
+                    const uniqueNames = [...new Set(data.map(item => item.name))].slice(0, 10); // Max 10 sugerencias
+                    
+                    list.innerHTML = '';
+                    if (uniqueNames.length === 0) {
+                        list.classList.add('hidden');
+                        return;
+                    }
+
+                    uniqueNames.forEach(name => {
+                        const li = document.createElement('li');
+                        li.className = 'suggestion-item px-4 py-3 text-sm font-medium text-slate-700 border-b border-slate-50 last:border-0';
+                        // Resaltar la coincidencia en negrita
+                        const regex = new RegExp(`(${term})`, 'gi');
+                        const highlightedName = name.replace(regex, '<span class="text-indigo-600 font-bold">$1</span>');
+                        li.innerHTML = `🔍 ${highlightedName}`;
+                        
+                        // AL HACER CLIC EN UNA SUGERENCIA
+                        li.onclick = () => {
+                            input.value = name; // Poner nombre completo
+                            list.classList.add('hidden'); // Ocultar lista
+                            executeSearch(name); // Ejecutar búsqueda final
+                        };
+                        list.appendChild(li);
+                    });
+                    
+                    list.classList.remove('hidden');
+                }, 300); // Debounce de 300ms
+            });
+
+            // Cerrar lista si clicamos fuera
+            document.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !list.contains(e.target)) {
+                    list.classList.add('hidden');
                 }
             });
         }
 
-        async function performSearch(term) {
-            currentMode = 'search';
-            document.getElementById('status-text').innerText = `🔍 Buscando "${term}"...`;
-            document.getElementById('clear-search').classList.remove('hidden');
-            document.getElementById('tabs-container').classList.add('opacity-50', 'pointer-events-none');
-
-            // Llamada RPC para buscar
-            const { data, error } = await supabase.rpc('search_cards', { keyword: term });
-
-            if (error) { 
-                alert("Error Búsqueda: " + error.message); 
-                document.getElementById('status-text').innerText = "Error en búsqueda";
-                return; 
-            }
-
-            currentData = data || [];
-            document.getElementById('status-text').innerText = `Resultados para "${term}": ${currentData.length}`;
-            document.getElementById('col-metric').innerText = 'Gap';
+        async function executeSearch(exactName) {
+            document.getElementById('status-text').innerText = `Cargando resultados para: ${exactName}...`;
+            // Reutilizamos la función de búsqueda pero filtraremos en el cliente o confiamos en el orden
+            // Nota: search_cards ya busca por ILIKE, así que traerá las variaciones.
+            const { data, error } = await supabase.rpc('search_cards', { keyword: exactName });
+            
+            if (error) { alert("Error: " + error.message); return; }
+            
+            currentData = data;
+            document.getElementById('status-text').innerText = `${data.length} versiones encontradas`;
+            document.getElementById('col-metric').innerText = 'Gap'; // En búsqueda el gap es útil
             renderTable();
         }
 
-        function resetSearch(reload = true) {
-            document.getElementById('search-box').value = '';
-            document.getElementById('clear-search').classList.add('hidden');
-            document.getElementById('tabs-container').classList.remove('opacity-50', 'pointer-events-none');
-            
-            if (currentMode === 'search') {
-                switchMode('arbitrage');
-            } else if (reload) {
-                loadData();
-            }
-        }
-
-        // --- CARGA DE DATOS ---
+        // --- CARGA DE DATOS PRINCIPAL ---
         async function loadData() {
-            if (currentMode === 'search') return;
+            if (currentMode === 'search') return; // En modo búsqueda no cargamos nada automático al inicio
 
             document.getElementById('status-text').innerText = "Cargando...";
             let query;
@@ -206,8 +234,7 @@
                 query = supabase.rpc('get_us_spikes');
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
-                // Usamos la nueva función RPC para demanda
-                query = supabase.rpc('get_demand_spikes');
+                query = supabase.from('demand_data').select('*').order('ratio', {ascending: false});
                 metricLabel = 'Demanda 7d';
             }
 
@@ -219,11 +246,7 @@
             }
             
             currentData = data || [];
-            
-            // Ordenación estándar (Demanda ya viene ordenada por SQL)
-            if (currentMode !== 'demand') {
-                currentData.sort((a, b) => b.ratio - a.ratio);
-            }
+            if (currentMode !== 'demand') currentData.sort((a, b) => b.ratio - a.ratio);
             
             document.getElementById('status-text').innerText = `${currentData.length} resultados`;
             document.getElementById('col-metric').innerText = metricLabel;
@@ -232,10 +255,23 @@
 
         function switchMode(mode) {
             currentMode = mode;
-            ['arbitrage', 'trend', 'demand'].forEach(m => {
-                document.getElementById(`tab-${m}`).className = (m === mode) ? 'flex-1 py-3 font-bold text-sm uppercase active-tab' : 'flex-1 py-3 font-bold text-sm uppercase inactive-tab';
+            // Gestionar clases de pestañas
+            ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
+                const tab = document.getElementById(`tab-${m}`);
+                if(tab) tab.className = (m === mode) ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
             });
-            loadData();
+
+            // Mostrar/Ocultar contenedor de búsqueda
+            const searchContainer = document.getElementById('search-container');
+            if (mode === 'search') {
+                searchContainer.classList.remove('hidden');
+                document.getElementById('table-body').innerHTML = ''; // Limpiar tabla al entrar
+                document.getElementById('status-text').innerText = 'Escribe para buscar...';
+                document.getElementById('search-input').focus();
+            } else {
+                searchContainer.classList.add('hidden');
+                loadData(); // Cargar datos del modo seleccionado
+            }
         }
 
         function renderTable() {
@@ -250,7 +286,9 @@
             currentData.forEach((item, index) => {
                 let metricValue, metricClass;
                 
+                // Lógica de visualización de métricas
                 if (currentMode === 'search') {
+                    // En búsqueda mostramos el Gap USD/EUR
                     metricValue = item.ratio.toFixed(2) + 'x';
                     metricClass = item.ratio > 1.5 ? 'ratio-high' : 'text-slate-500 bg-slate-50 px-2 py-1 rounded';
                 } else if (currentMode === 'arbitrage') {
@@ -282,7 +320,7 @@
                                 </div>
                                 <div>
                                     <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
-                                    ${currentMode === 'search' ? `<div class="text-[10px] text-slate-400 font-mono">${item.set_code.toUpperCase()}</div>` : ''}
+                                    ${currentMode === 'search' ? `<div class="text-[10px] text-slate-400 font-mono font-bold">${item.set_code.toUpperCase()}</div>` : ''}
                                 </div>
                             </div>
                         </td>
@@ -299,52 +337,4 @@
                         <td class="px-4 py-3 text-center">
                             <div class="icon-group">
                                 <button onclick="showChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
-                                </button>
-                                <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                                </a>
-                                <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50">
-                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
-                                </a>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                tbody.insertAdjacentHTML('beforeend', row);
-            });
-        }
-
-        async function showChart(index) {
-            const item = currentData[index];
-            document.getElementById('modal-title').innerText = item.name;
-            document.getElementById('chart-modal').classList.remove('hidden');
-            if (chartInstance) chartInstance.destroy();
-
-            const { data: history } = await supabase.rpc('get_card_history', { 
-                target_card_name: item.name, target_set_code: item.set_code 
-            });
-
-            if (!history || history.length === 0) return;
-
-            const labels = history.map(h => new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'}));
-            const dataEur = history.map(h => h.eur);
-            const dataUsd = history.map(h => h.usd);
-            const dataRank = history.map(h => h.edhrec_rank);
-
-            const ctx = document.getElementById('priceChart').getContext('2d');
-            chartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'USA $', data: dataUsd, yAxisID: 'y-price', borderColor: '#3b82f6', tension: 0.4 },
-                        { label: 'EUR €', data: dataEur, yAxisID: 'y-price', borderColor: '#22c55e', tension: 0.4 },
-                        { label: 'Rank', data: dataRank, yAxisID: 'y-rank', borderColor: '#8b5cf6', borderDash: [5,5], tension: 0.4 }
-                    ]
-                },
-                options: { 
-                    maintainAspectRatio: false, 
-                    interaction: { mode: 'index', intersect: false },
-                    scales: {
-                        'y-price': { type: 'lin
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v

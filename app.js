@@ -4,7 +4,7 @@ let currentData = [];
 let searchTimer = null;
 let chartInstance = null;
 
-// --- 1. ARRANQUE ---
+// --- INICIO ---
 window.onload = function() {
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
@@ -14,23 +14,22 @@ window.onload = function() {
     } else {
         document.getElementById('config-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
-        
         try {
             supabase = window.supabase.createClient(url, key);
             initAutocomplete(); 
             loadData();
         } catch (e) {
-            alert("Error inicializando. Reseteando...");
+            alert("Error inicializando. Reset.");
             resetConfig();
         }
     }
 };
 
-// --- 2. CARGA DE DATOS (TABLA) ---
+// --- CARGA DE DATOS (Modo Tabla) ---
 async function loadData() {
     if (currentMode === 'search') return;
 
-    // Resetear Vistas
+    // Gestión de Vistas
     document.getElementById('view-table').classList.remove('hidden');
     document.getElementById('view-search').classList.add('hidden');
     document.getElementById('status-bar').classList.remove('hidden');
@@ -43,7 +42,6 @@ async function loadData() {
     else if (currentMode === 'demand') { rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; }
 
     const { data, error } = await supabase.rpc(rpcName);
-    
     if (error) { alert("Error API: " + error.message); return; }
     
     currentData = data || [];
@@ -98,7 +96,7 @@ function renderTable() {
     });
 }
 
-// --- 3. SISTEMA DE BÚSQUEDA ---
+// --- SISTEMA DE BÚSQUEDA ---
 function initAutocomplete() {
     const input = document.getElementById('search-input');
     const list = document.getElementById('suggestions-list');
@@ -142,11 +140,8 @@ async function performSearch(name) {
 
     const { data } = await supabase.rpc('search_cards', { keyword: name });
     
-    // AQUÍ ESTÁ LA CORRECCIÓN CLAVE:
-    // Actualizamos currentData con los resultados de la búsqueda
-    // para que cuando pulses el botón de gráfica, use estos datos.
+    // IMPORTANTE: Actualizar currentData para que las gráficas funcionen
     currentData = data || []; 
-    
     grid.innerHTML = '';
 
     if (currentData.length === 0) {
@@ -154,7 +149,7 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+    document.getElementById('status-text').innerText = `${currentData.length} versiones`;
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
@@ -213,7 +208,7 @@ async function performSearch(name) {
     });
 }
 
-// --- 4. UTILIDADES ---
+// --- UTILIDADES ---
 function switchMode(mode) {
     currentMode = mode;
     ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
@@ -226,7 +221,7 @@ function switchMode(mode) {
     if (mode === 'search') {
         document.getElementById('view-table').classList.add('hidden');
         document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('status-bar').classList.add('hidden'); 
+        document.getElementById('status-bar').classList.add('hidden');
         document.getElementById('search-input').focus();
     } else {
         document.getElementById('view-table').classList.remove('hidden');
@@ -240,9 +235,10 @@ function switchMode(mode) {
 }
 
 async function openChart(i) {
-    const item = currentData[i]; // Ahora currentData SIEMPRE tiene lo que vemos en pantalla
+    const item = currentData[i];
     
-    if (!item) { console.error("Item no encontrado para el índice", i); return; }
+    // Si no hay item (error de índice), abortamos
+    if (!item) { alert("Error al cargar la carta."); return; }
 
     document.getElementById('modal-chart').classList.remove('hidden');
     document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
@@ -252,7 +248,7 @@ async function openChart(i) {
     const { data } = await supabase.rpc('get_card_history', { target_card_name: item.name, target_set_code: item.set_code });
     
     if (!data || data.length === 0) {
-        alert("Sin historial disponible.");
+        alert("Sin historial.");
         document.getElementById('modal-chart').classList.add('hidden');
         return;
     }
@@ -264,10 +260,15 @@ async function openChart(i) {
             labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
             datasets: [
                 { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3, pointRadius: 2 },
-                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 }
+                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 },
+                { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y1', hidden: false }
             ]
         },
-        options: { maintainAspectRatio: false, scales: { y: { beginAtZero: false } } }
+        options: { 
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: { y: { beginAtZero: false, position: 'left' }, y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } } }
+        }
     });
 }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper Final</title>
+    <title>MTG Sniper V5.1</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -17,25 +17,26 @@
         .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        
+        /* Estilos de Pestañas */
         .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
         .inactive-tab { color: #64748b; }
+        
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
         .icon-group { display: flex; gap: 8px; justify-content: center; }
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.2s; }
         .icon-btn:hover { background-color: #e2e8f0; }
 
-        /* Estilos del desplegable de sugerencias */
-        #suggestions-list {
-            max-height: 200px;
-            overflow-y: auto;
-            scrollbar-width: thin;
-        }
+        /* Lista de sugerencias */
+        #suggestions-list { max-height: 200px; overflow-y: auto; }
         .suggestion-item:hover { background-color: #f1f5f9; cursor: pointer; }
 
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
+
+    <div id="global-error" class="hidden fixed top-0 left-0 w-full bg-red-600 text-white p-4 text-center z-[1000] font-bold"></div>
 
     <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -76,17 +77,12 @@
 
         <div id="search-container" class="hidden mb-4 relative z-50">
             <div class="relative">
-                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all" placeholder="Escribe el nombre de la carta (ej: Sol Ring)..." autocomplete="off">
+                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all" placeholder="Escribe para buscar (ej: Sol Ring)..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 </div>
-                <div id="search-spinner" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center">
-                    <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                </div>
             </div>
-            
-            <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 z-50 divide-y divide-slate-100">
-                </ul>
+            <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 z-50 divide-y divide-slate-100"></ul>
         </div>
 
         <div class="flex justify-between items-center mb-4 px-1">
@@ -117,180 +113,133 @@
     </div>
 
     <script>
+        // --- VARIABLES GLOBALES ---
         let supabase = null;
         let currentMode = 'arbitrage';
         let currentData = [];
-        let chartInstance = null;
         let searchTimeout = null;
+        let chartInstance = null;
 
-        // Inicio seguro
-        window.onload = function() { initApp(); };
+        // --- SISTEMA DE ERRORES ---
+        window.onerror = function(message, source, lineno, colno, error) {
+            const errorBox = document.getElementById('global-error');
+            errorBox.innerText = `ERROR JS: ${message}`;
+            errorBox.classList.remove('hidden');
+        };
+
+        // --- INICIO ---
+        window.onload = function() {
+            try {
+                initApp();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('global-error').innerText = "Fallo crítico al iniciar: " + e.message;
+                document.getElementById('global-error').classList.remove('hidden');
+            }
+        };
 
         function initApp() {
             const url = localStorage.getItem('supabase_url');
             const key = localStorage.getItem('supabase_key');
-            if (!url || !key) { document.getElementById('config-screen').classList.remove('hidden'); }
-            else {
+            
+            if (!url || !key) { 
+                document.getElementById('config-screen').classList.remove('hidden'); 
+            } else {
                 document.getElementById('config-screen').classList.add('hidden');
-                try {
-                    supabase = window.supabase.createClient(url, key);
-                    setupAutocomplete(); // Iniciamos el listener del buscador
-                    loadData();
-                } catch (e) { resetConfig(); }
+                
+                if (typeof window.supabase === 'undefined') {
+                    throw new Error("La librería Supabase no se ha cargado. Revisa tu conexión.");
+                }
+
+                supabase = window.supabase.createClient(url, key);
+                setupAutocomplete();
+                loadData();
             }
         }
 
-        // --- LÓGICA DE AUTOCOMPLETADO ---
-        function setupAutocomplete() {
-            const input = document.getElementById('search-input');
-            const list = document.getElementById('suggestions-list');
-            const spinner = document.getElementById('search-spinner');
+        // --- GESTIÓN DE PESTAÑAS (SWITCH MODE) ---
+        function switchMode(mode) {
+            currentMode = mode;
 
-            input.addEventListener('input', (e) => {
-                const term = e.target.value.trim();
-                clearTimeout(searchTimeout);
-                
-                if (term.length < 3) {
-                    list.classList.add('hidden');
-                    return;
-                }
-
-                spinner.classList.remove('hidden'); // Mostrar spinner
-                searchTimeout = setTimeout(async () => {
-                    // Llamamos a la API para obtener sugerencias
-                    const { data, error } = await supabase.rpc('search_cards', { keyword: term });
-                    spinner.classList.add('hidden'); // Ocultar spinner
-
-                    if (error || !data || data.length === 0) {
-                        list.classList.add('hidden');
-                        return;
-                    }
-
-                    // Renderizar lista de sugerencias (agrupadas por nombre para no repetir)
-                    // Usamos un Set para obtener nombres únicos
-                    const uniqueNames = [...new Set(data.map(item => item.name))].slice(0, 10); // Max 10 sugerencias
-                    
-                    list.innerHTML = '';
-                    if (uniqueNames.length === 0) {
-                        list.classList.add('hidden');
-                        return;
-                    }
-
-                    uniqueNames.forEach(name => {
-                        const li = document.createElement('li');
-                        li.className = 'suggestion-item px-4 py-3 text-sm font-medium text-slate-700 border-b border-slate-50 last:border-0';
-                        // Resaltar la coincidencia en negrita
-                        const regex = new RegExp(`(${term})`, 'gi');
-                        const highlightedName = name.replace(regex, '<span class="text-indigo-600 font-bold">$1</span>');
-                        li.innerHTML = `🔍 ${highlightedName}`;
-                        
-                        // AL HACER CLIC EN UNA SUGERENCIA
-                        li.onclick = () => {
-                            input.value = name; // Poner nombre completo
-                            list.classList.add('hidden'); // Ocultar lista
-                            executeSearch(name); // Ejecutar búsqueda final
-                        };
-                        list.appendChild(li);
-                    });
-                    
-                    list.classList.remove('hidden');
-                }, 300); // Debounce de 300ms
-            });
-
-            // Cerrar lista si clicamos fuera
-            document.addEventListener('click', (e) => {
-                if (!input.contains(e.target) && !list.contains(e.target)) {
-                    list.classList.add('hidden');
+            // 1. Actualizar estilos de botones
+            const modes = ['arbitrage', 'trend', 'demand', 'search'];
+            modes.forEach(m => {
+                const btn = document.getElementById(`tab-${m}`);
+                if (btn) {
+                    btn.className = (m === mode) 
+                        ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap'
+                        : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
                 }
             });
+
+            // 2. Mostrar/Ocultar Buscador
+            const searchContainer = document.getElementById('search-container');
+            if (mode === 'search') {
+                searchContainer.classList.remove('hidden');
+                document.getElementById('table-body').innerHTML = ''; // Limpiar tabla
+                document.getElementById('status-text').innerText = 'Escribe para buscar...';
+                setTimeout(() => document.getElementById('search-input').focus(), 100);
+            } else {
+                searchContainer.classList.add('hidden');
+                loadData(); // Cargar datos normales
+            }
         }
 
-        async function executeSearch(exactName) {
-            document.getElementById('status-text').innerText = `Cargando resultados para: ${exactName}...`;
-            // Reutilizamos la función de búsqueda pero filtraremos en el cliente o confiamos en el orden
-            // Nota: search_cards ya busca por ILIKE, así que traerá las variaciones.
-            const { data, error } = await supabase.rpc('search_cards', { keyword: exactName });
-            
-            if (error) { alert("Error: " + error.message); return; }
-            
-            currentData = data;
-            document.getElementById('status-text').innerText = `${data.length} versiones encontradas`;
-            document.getElementById('col-metric').innerText = 'Gap'; // En búsqueda el gap es útil
-            renderTable();
-        }
-
-        // --- CARGA DE DATOS PRINCIPAL ---
+        // --- CARGA DE DATOS ---
         async function loadData() {
-            if (currentMode === 'search') return; // En modo búsqueda no cargamos nada automático al inicio
+            if (currentMode === 'search') return;
 
             document.getElementById('status-text').innerText = "Cargando...";
             let query;
             let metricLabel;
             
-            if (currentMode === 'arbitrage') {
-                query = supabase.rpc('get_arbitrage_opportunities');
-                metricLabel = 'Gap';
-            } else if (currentMode === 'trend') {
-                query = supabase.rpc('get_us_spikes');
-                metricLabel = 'Subida %';
-            } else if (currentMode === 'demand') {
-                query = supabase.from('demand_data').select('*').order('ratio', {ascending: false});
-                metricLabel = 'Demanda 7d';
-            }
+            try {
+                if (currentMode === 'arbitrage') {
+                    query = supabase.rpc('get_arbitrage_opportunities');
+                    metricLabel = 'Gap';
+                } else if (currentMode === 'trend') {
+                    query = supabase.rpc('get_us_spikes');
+                    metricLabel = 'Subida %';
+                } else if (currentMode === 'demand') {
+                    query = supabase.rpc('get_demand_spikes');
+                    metricLabel = 'Demanda 7d';
+                }
 
-            const { data, error } = await query;
-            
-            if (error) { 
-                document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center text-red-500 p-4">Error API: ${error.message}</td></tr>`;
-                return; 
-            }
-            
-            currentData = data || [];
-            if (currentMode !== 'demand') currentData.sort((a, b) => b.ratio - a.ratio);
-            
-            document.getElementById('status-text').innerText = `${currentData.length} resultados`;
-            document.getElementById('col-metric').innerText = metricLabel;
-            renderTable();
-        }
+                const { data, error } = await query;
+                
+                if (error) throw error;
+                
+                // Procesar datos
+                currentData = data || [];
+                if (currentMode !== 'demand') currentData.sort((a, b) => b.ratio - a.ratio);
+                
+                document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+                document.getElementById('col-metric').innerText = metricLabel;
+                renderTable();
 
-        function switchMode(mode) {
-            currentMode = mode;
-            // Gestionar clases de pestañas
-            ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
-                const tab = document.getElementById(`tab-${m}`);
-                if(tab) tab.className = (m === mode) ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
-            });
-
-            // Mostrar/Ocultar contenedor de búsqueda
-            const searchContainer = document.getElementById('search-container');
-            if (mode === 'search') {
-                searchContainer.classList.remove('hidden');
-                document.getElementById('table-body').innerHTML = ''; // Limpiar tabla al entrar
-                document.getElementById('status-text').innerText = 'Escribe para buscar...';
-                document.getElementById('search-input').focus();
-            } else {
-                searchContainer.classList.add('hidden');
-                loadData(); // Cargar datos del modo seleccionado
+            } catch (err) {
+                document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center text-red-500 p-8 font-bold">Error API: ${err.message}</td></tr>`;
+                document.getElementById('status-text').innerText = "Error";
             }
         }
 
+        // --- RENDERIZADO DE TABLA ---
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
             
             if (!currentData || currentData.length === 0) { 
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`; 
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos disponibles.</td></tr>`; 
                 return; 
             }
 
             currentData.forEach((item, index) => {
                 let metricValue, metricClass;
                 
-                // Lógica de visualización de métricas
+                // Lógica visual
                 if (currentMode === 'search') {
-                    // En búsqueda mostramos el Gap USD/EUR
-                    metricValue = item.ratio.toFixed(2) + 'x';
-                    metricClass = item.ratio > 1.5 ? 'ratio-high' : 'text-slate-500 bg-slate-50 px-2 py-1 rounded';
+                    metricValue = (item.ratio || 0).toFixed(2) + 'x';
+                    metricClass = item.ratio > 1.5 ? 'ratio-high' : 'bg-slate-100 text-slate-500 px-2 py-1 rounded';
                 } else if (currentMode === 'arbitrage') {
                     metricValue = item.ratio.toFixed(2) + 'x';
                     metricClass = item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high';
@@ -320,15 +269,15 @@
                                 </div>
                                 <div>
                                     <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
-                                    ${currentMode === 'search' ? `<div class="text-[10px] text-slate-400 font-mono font-bold">${item.set_code.toUpperCase()}</div>` : ''}
+                                    ${currentMode === 'search' ? `<div class="text-[10px] text-slate-400 font-mono font-bold">${(item.set_code||'').toUpperCase()}</div>` : ''}
                                 </div>
                             </div>
                         </td>
                         <td class="px-2 py-3 text-center">
                              <span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase hidden md:inline-block">${item.set_code}</span>
                         </td>
-                        <td class="px-4 py-3 text-right font-mono font-bold text-slate-700">${item.eur.toFixed(2)}€</td>
-                        <td class="hide-mobile px-4 py-3 text-right font-mono text-slate-400">$${item.usd.toFixed(2)}</td>
+                        <td class="px-4 py-3 text-right font-mono font-bold text-slate-700">${(item.eur||0).toFixed(2)}€</td>
+                        <td class="hide-mobile px-4 py-3 text-right font-mono text-slate-400">$${(item.usd||0).toFixed(2)}</td>
                         <td class="px-4 py-3 text-center">
                             <span class="${metricClass} text-sm">${metricValue}</span>
                         </td>
@@ -337,4 +286,71 @@
                         <td class="px-4 py-3 text-center">
                             <div class="icon-group">
                                 <button onclick="showChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
+                                </button>
+                                <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                </a>
+                                <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50">
+                                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // --- BÚSQUEDA (AUTOCOMPLETE) ---
+        function setupAutocomplete() {
+            const input = document.getElementById('search-input');
+            const list = document.getElementById('suggestions-list');
+
+            if (!input) return;
+
+            input.addEventListener('input', (e) => {
+                const term = e.target.value.trim();
+                clearTimeout(searchTimeout);
+                
+                if (term.length < 3) {
+                    list.classList.add('hidden');
+                    return;
+                }
+
+                searchTimeout = setTimeout(async () => {
+                    const { data, error } = await supabase.rpc('search_cards', { keyword: term });
+
+                    if (error || !data || data.length === 0) {
+                        list.classList.add('hidden');
+                        return;
+                    }
+
+                    const uniqueNames = [...new Set(data.map(item => item.name))].slice(0, 10);
+                    
+                    list.innerHTML = '';
+                    uniqueNames.forEach(name => {
+                        const li = document.createElement('li');
+                        li.className = 'suggestion-item px-4 py-3 text-sm font-medium text-slate-700 border-b border-slate-50';
+                        li.innerHTML = `🔍 ${name}`;
+                        li.onclick = () => {
+                            input.value = name;
+                            list.classList.add('hidden');
+                            executeSearch(name);
+                        };
+                        list.appendChild(li);
+                    });
+                    list.classList.remove('hidden');
+                }, 300);
+            });
+
+            // Cerrar al hacer click fuera
+            document.addEventListener('click', (e) => {
+                if (input && !input.contains(e.target) && list && !list.contains(e.target)) {
+                    list.classList.add('hidden');
+                }
+            });
+        }
+
+        async function executeSearch(exactName) {
+            document.getElementById('status-text').innerText 

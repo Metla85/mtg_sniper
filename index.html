@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper - Ultimate UX</title>
+    <title>MTG Sniper - Ultimate</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,15 +13,16 @@
     
     <style>
         /* ESTILOS PERSONALIZADOS */
-        .card-row:hover { background-color: #f8fafc; }
+        .card-row:hover { background-color: #f8fafc; cursor: pointer; }
         .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
+        .inactive-tab { color: #64748b; }
         
-        /* Iconos de acción */
-        .icon-group { display: flex; gap: 4px; justify-content: center; }
-        .icon-btn { opacity: 0.8; transition: all 0.2s; width: 32px; height: 32px; border-radius: 8px; justify-content: center; align-items: center; }
-        .icon-btn:hover { opacity: 1; background-color: #e2e8f0; }
+        /* Flechas de Rank */
+        .rank-up { color: #10b981; } /* Verde para mejora (número más bajo) */
+        .rank-down { color: #ef4444; } /* Rojo para empeoramiento (número más alto) */
 
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
@@ -32,7 +33,7 @@
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper</h2>
             <input type="text" id="input-url" placeholder="URL" class="w-full p-3 bg-slate-50 border rounded-xl text-sm font-mono mb-3">
-            <input type="password" id="input-key" placeholder="Key" class="w-full p-3 bg-slate-50 border rounded-xl text-sm font-mono mb-4">
+            <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 bg-slate-50 border rounded-xl text-sm font-mono mb-4">
             <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl transition shadow-lg">Entrar</button>
         </div>
     </div>
@@ -40,14 +41,14 @@
     <div id="chart-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onclick="closeModal(event)">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden relative" onclick="event.stopPropagation()">
             <div class="p-4 border-b flex justify-between items-center bg-slate-50">
-                <h3 id="modal-title" class="font-bold text-lg">Historial de Precio</h3>
+                <h3 id="modal-title" class="font-bold text-lg">Historial de Precio y Tendencia</h3>
                 <button onclick="document.getElementById('chart-modal').classList.add('hidden')" class="text-2xl leading-none text-slate-400 hover:text-slate-600">&times;</button>
             </div>
             <div class="p-4 h-64 md:h-80">
                 <canvas id="priceChart"></canvas>
             </div>
             <div class="p-4 bg-slate-50 text-xs text-center text-slate-500">
-                Línea Azul: USA (Tendencia) | Línea Verde: Europa (Oportunidad)
+                Gráfica: Compara la demanda (Rank) con el precio. Rank es invertido (más bajo es mejor).
             </div>
         </div>
     </div>
@@ -84,6 +85,8 @@
                             <th class="px-4 py-3 text-right">EUR</th>
                             <th class="hide-mobile px-4 py-3 text-right">USD</th>
                             <th class="px-4 py-3 text-center" id="col-metric">Gap</th>
+                            <th class="px-4 py-3 text-center">Rank</th>
+                            <th class="px-4 py-3 text-center">Var.</th>
                             <th class="px-4 py-3 text-center">Acciones</th>
                         </tr>
                     </thead>
@@ -92,7 +95,7 @@
             </div>
         </div>
         
-        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa los iconos para comprar o analizar. Pulsa la foto para ampliar.</p>
+        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en cualquier foto para ampliarla.</p>
     </div>
 
     <script>
@@ -120,10 +123,11 @@
             
             if (error) { alert("Error API: " + error.message); return; }
             
-            currentData = data.sort((a, b) => b[currentMode === 'arbitrage' ? 'ratio' : 'usd_growth'] - a[currentMode === 'arbitrage' ? 'ratio' : 'usd_growth']);
+            // Ordenar por métrica principal (Ratio o Growth)
+            currentData = data.sort((a, b) => b.ratio - a.ratio);
             document.getElementById('status-text').innerText = `${data.length} resultados`;
             
-            document.getElementById('col-metric').innerText = currentMode === 'arbitrage' ? 'Gap' : 'Subida 24h';
+            document.getElementById('col-metric').innerText = currentMode === 'arbitrage' ? 'Gap' : 'Subida %';
             renderTable();
         }
 
@@ -138,17 +142,19 @@
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
             
-            if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400">Nada hoy.</td></tr>`; return; }
+            if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Nada hoy.</td></tr>`; return; }
 
             currentData.forEach((item, index) => {
-                let metricValue = currentMode === 'arbitrage' ? item.ratio.toFixed(2) + 'x' : `${item.usd_growth}%`;
+                let metricValue = currentMode === 'arbitrage' ? item.ratio.toFixed(2) + 'x' : item.ratio.toFixed(2) + '%';
                 let metricClass = currentMode === 'arbitrage' ? (item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high') : 'growth-pos';
 
-                const cleanName = item.name.replace(/'/g, ''); 
-                const cleanNameUrl = cleanName.replace(/ /g, '-').replace(/\/\/.*/, ''); 
+                // Lógica de Rank Change
+                const rankChange = item.rank_change || 0;
+                const rankChangeClass = rankChange > 0 ? 'rank-up' : (rankChange < 0 ? 'rank-down' : 'text-slate-400');
+                const rankChangeArrow = rankChange > 0 ? '▲' : (rankChange < 0 ? '▼' : '—');
                 
-                // URLs mejoradas
-                const mkmLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanNameUrl}?language=1&minCondition=3`; // English + Excellent
+                const cleanNameUrl = item.name.replace(/ /g, '-').replace(/'/g, '').replace(/\/\/.*/, '');
+                const mkmLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanNameUrl}?language=1&minCondition=3`;
                 const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
                 const edhLink = `https://edhrec.com/cards/${cleanNameUrl.toLowerCase()}`;
                 
@@ -170,9 +176,13 @@
                         <td class="px-4 py-3 text-center">
                             <span class="ratio-badge ${metricClass} text-sm">${metricValue}</span>
                         </td>
+                        <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">#${item.current_rank}</td>
+                        <td class="px-4 py-3 text-center text-xs ${rankChangeClass} font-bold">
+                            ${rankChangeArrow} ${Math.abs(rankChange)}
+                        </td>
                         <td class="px-4 py-3 text-center">
                             <div class="icon-group">
-                                <button onclick="showChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Historial">
+                                <button onclick="showChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                                 </button>
                                 <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="Comprar (MKM)">
@@ -180,9 +190,6 @@
                                 </a>
                                 <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="Vender (Buylist)">
                                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
-                                </a>
-                                <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50 hidden md:flex" title="EDHStats">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                                 </a>
                             </div>
                         </td>
@@ -195,17 +202,17 @@
         // --- FUNCIONES DE GRÁFICAS Y UTILIDADES ---
         async function showChart(index) {
             const item = currentData[index];
-            document.getElementById('modal-title').innerText = item.name + " (30 Días)";
+            document.getElementById('modal-title').innerText = item.name + " (Historial de 30 Días)";
             document.getElementById('chart-modal').classList.remove('hidden');
             
             if (chartInstance) chartInstance.destroy();
 
-            const { data: history, error } = await supabase.rpc('get_card_history', { 
+            const { data: history } = await supabase.rpc('get_card_history', { 
                 target_card_name: item.name, 
                 target_set_code: item.set_code 
             });
 
-            if (error || !history || history.length === 0) {
+            if (!history || history.length === 0) {
                 document.getElementById('modal-title').innerText = item.name + " (Sin Historial Disponible)";
                 return; 
             }
@@ -213,6 +220,7 @@
             const labels = history.map(h => new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'}));
             const dataEur = history.map(h => h.eur);
             const dataUsd = history.map(h => h.usd);
+            const dataRank = history.map(h => h.edhrec_rank); // Nuevo Set de datos
 
             const ctx = document.getElementById('priceChart').getContext('2d');
             
@@ -221,16 +229,26 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Precio USA ($)', data: dataUsd, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2 },
-                        { label: 'Precio EUR (€)', data: dataEur, borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', tension: 0.4, pointRadius: 2 }
+                        { label: 'Precio USA ($)', data: dataUsd, yAxisID: 'y-price', borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2 },
+                        { label: 'Precio EUR (€)', data: dataEur, yAxisID: 'y-price', borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', tension: 0.4, pointRadius: 2 },
+                        { label: 'Rank EDHRec', data: dataRank, yAxisID: 'y-rank', borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', borderWidth: 1, pointRadius: 1, borderDash: [5, 5] }
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: false } } }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    interaction: { mode: 'index', intersect: false }, 
+                    plugins: { legend: { position: 'top' } }, 
+                    scales: { 
+                        'y-price': { beginAtZero: false, position: 'left', title: { display: true, text: 'Precio (€/$)' } },
+                        'y-rank': { beginAtZero: false, position: 'right', reverse: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Rank (Bajo = Mejor)' } }
+                    }
+                }
             });
         }
 
         function showImageModal(imageUrl, event) {
-            event.stopPropagation(); // Evita que se abra la gráfica al ampliar
+            event.stopPropagation();
             document.getElementById('enlarged-image').src = imageUrl;
             document.getElementById('image-modal').classList.remove('hidden');
         }
@@ -252,4 +270,5 @@
         initApp();
     </script>
 </body>
-</html>
+            </html>
+            

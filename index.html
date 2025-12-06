@@ -119,7 +119,8 @@
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
                 // ATENCIÓN: Nombre actualizado a 'demand_data'
-                query = supabase.from('demand_data').select('*').order('ratio', {ascending: false});
+                // Leemos de la tabla física SNAPSHOT
+                query = supabase.from('demand_snapshot').select('*').order('ratio', {ascending: false});
                 metricLabel = 'Demanda 7d';
             }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V14</title>
+    <title>MTG Sniper V15</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -14,22 +14,21 @@
     <style>
         body { -webkit-tap-highlight-color: transparent; }
         
-        /* ESTILOS BASE (Intactos) */
-        .card-row:hover { background-color: #f8fafc; cursor: pointer; }
+        /* PESTAÑAS */
+        .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
+        .inactive-tab { color: #64748b; }
+        
+        /* ESTILOS TABLA */
         .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
-        .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
-        .inactive-tab { color: #64748b; }
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
-        .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
-        .icon-btn:hover { background-color: #e2e8f0; }
-
-        /* NUEVOS ESTILOS PARA BÚSQUEDA */
+        
+        /* ESTILOS FICHA (BÚSQUEDA) */
+        .card-sheet { transition: transform 0.2s; }
+        .card-sheet:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         #suggestions-list { max-height: 250px; overflow-y: auto; z-index: 50; }
-        .card-sheet { transition: transform 0.2s, box-shadow 0.2s; }
-        .card-sheet:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-
+        
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -44,10 +43,10 @@
         </div>
     </div>
 
-    <div id="main-screen" class="hidden max-w-6xl mx-auto pb-20">
+    <div id="main-screen" class="max-w-6xl mx-auto pb-20">
         
-        <div class="mb-4 pt-2 flex justify-between items-center px-2">
-            <h1 class="text-2xl font-black tracking-tight">MTG Sniper</h1>
+        <div class="mb-4 pt-2 flex justify-between items-center px-1">
+            <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
             <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
         </div>
 
@@ -58,9 +57,9 @@
             <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
         </div>
 
-        <div id="search-ui" class="hidden mb-4 relative z-50 px-1">
+        <div id="search-module" class="hidden mb-4 relative z-50">
             <div class="relative">
-                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all font-bold text-lg" placeholder="Escribe para buscar..." autocomplete="off">
+                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none font-bold text-lg" placeholder="Nombre de la carta..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
             </div>
             <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 divide-y divide-slate-100"></ul>
@@ -68,7 +67,7 @@
 
         <div class="flex justify-between items-center mb-4 px-1">
             <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
-            <button onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar Lista</button>
+            <button id="copy-btn" onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar Lista</button>
         </div>
 
         <div id="view-table" class="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
@@ -90,8 +89,7 @@
             </div>
         </div>
 
-        <div id="view-cards" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 px-1">
-            </div>
+        <div id="view-cards" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 
         <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en la foto para ampliar.</p>
     </div>
@@ -102,7 +100,6 @@
             <div class="h-64 md:h-80"><canvas id="priceChart"></canvas></div>
         </div>
     </div>
-
     <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
         <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg">
     </div>
@@ -114,7 +111,7 @@
         let searchTimer = null;
         let chartInstance = null;
 
-        // --- 1. ARRANQUE ESTABLE (Igual que antes) ---
+        // --- ARRANQUE ---
         window.onload = function() {
             const url = localStorage.getItem('supabase_url');
             const key = localStorage.getItem('supabase_key');
@@ -123,27 +120,26 @@
                 document.getElementById('config-screen').classList.remove('hidden');
             } else {
                 document.getElementById('config-screen').classList.add('hidden');
-                document.getElementById('main-screen').classList.remove('hidden');
-                
                 try {
                     supabase = window.supabase.createClient(url, key);
-                    initAutocomplete(); // Inicializar el buscador
-                    loadData();         // Cargar datos iniciales
+                    initAutocomplete();
+                    loadData();
                 } catch (e) {
-                    alert("Error inicializando.");
+                    alert("Error crítico. Reset.");
                     resetConfig();
                 }
             }
         };
 
-        // --- 2. CARGA DE DATOS (Modos Normales) ---
+        // --- CARGA DE DATOS ---
         async function loadData() {
-            if (currentMode === 'search') return; // En búsqueda no cargamos automático
+            if (currentMode === 'search') return;
 
             // Gestión de Vistas
             document.getElementById('view-table').classList.remove('hidden');
             document.getElementById('view-cards').classList.add('hidden');
-            document.getElementById('search-ui').classList.add('hidden');
+            document.getElementById('search-module').classList.add('hidden');
+            document.getElementById('copy-btn').classList.remove('hidden');
 
             document.getElementById('status-text').innerText = "Cargando...";
             let rpcName, metricLabel;
@@ -164,7 +160,7 @@
             renderTable();
         }
 
-        // --- 3. RENDERIZADO TABLA ---
+        // --- RENDER TABLA (Modo Normal) ---
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
@@ -180,7 +176,7 @@
                 const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
 
                 const row = `
-                    <tr class="card-row border-b border-slate-100 transition-colors">
+                    <tr class="card-row border-b border-slate-100 hover:bg-slate-50">
                         <td class="px-4 py-3 pl-6">
                             <div class="flex items-center gap-3">
                                 <div class="cursor-pointer" onclick="showImage('${item.image_uri}', event)">
@@ -206,7 +202,7 @@
             });
         }
 
-        // --- 4. SISTEMA DE BÚSQUEDA Y FICHAS (NUEVO) ---
+        // --- SISTEMA DE BÚSQUEDA (NUEVO MÓDULO) ---
         function initAutocomplete() {
             const input = document.getElementById('search-input');
             const list = document.getElementById('suggestions-list');
@@ -214,6 +210,7 @@
             input.addEventListener('input', (e) => {
                 const term = e.target.value.trim();
                 clearTimeout(searchTimer);
+                
                 if (term.length < 3) { list.classList.add('hidden'); return; }
 
                 searchTimer = setTimeout(async () => {
@@ -222,11 +219,12 @@
 
                     const uniques = [...new Set(data.map(i => i.name))].slice(0, 10);
                     list.innerHTML = '';
+                    
                     uniques.forEach(name => {
                         const li = document.createElement('li');
                         li.className = 'px-4 py-3 text-sm font-medium hover:bg-indigo-50 cursor-pointer border-b border-slate-50 flex items-center gap-2';
-                        li.innerHTML = `<span class="text-indigo-400">🔍</span> ${name}`;
-                        li.onclick = () => doSearch(name);
+                        li.innerHTML = `🔍 ${name}`;
+                        li.onclick = () => performSearch(name);
                         list.appendChild(li);
                     });
                     list.classList.remove('hidden');
@@ -238,20 +236,24 @@
             });
         }
 
-        async function doSearch(name) {
+        async function performSearch(name) {
             document.getElementById('suggestions-list').classList.add('hidden');
             document.getElementById('search-input').value = name;
-            document.getElementById('status-text').innerText = "Buscando...";
-
-            // CAMBIO DE VISTA: OCULTAR TABLA -> MOSTRAR FICHAS
+            
+            // CAMBIO DE VISTA: Ocultar Tabla -> Mostrar Fichas
             document.getElementById('view-table').classList.add('hidden');
-            const cardsContainer = document.getElementById('view-cards');
-            cardsContainer.classList.remove('hidden');
-            cardsContainer.innerHTML = '';
+            document.getElementById('view-cards').classList.remove('hidden');
+            document.getElementById('status-text').innerText = "Buscando...";
+            
+            // Ocultar botón copiar en búsqueda
+            document.getElementById('copy-btn').classList.add('hidden');
 
             const { data } = await supabase.rpc('search_cards', { keyword: name });
-            currentData = data || []; // Actualizamos currentData para que las gráficas funcionen
-            document.getElementById('status-text').innerText = `${currentData.length} versiones`;
+            currentData = data || [];
+            document.getElementById('status-text').innerText = `${currentData.length} versiones encontradas`;
+            
+            const cardsContainer = document.getElementById('view-cards');
+            cardsContainer.innerHTML = '';
 
             currentData.forEach((item, i) => {
                 const card = document.createElement('div');
@@ -288,12 +290,8 @@
                         </div>
                     </div>
                     <div class="bg-slate-50 p-3 border-t flex justify-between items-center">
-                        <button onclick="openChart(${i})" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                            📊 Ver Historial
-                        </button>
-                        <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition">
-                            Comprar
-                        </a>
+                        <button onclick="openChart(${i})" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">📊 Historial</button>
+                        <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition">Comprar</a>
                     </div>
                 `;
                 cardsContainer.appendChild(card);
@@ -303,26 +301,19 @@
         // --- UTILIDADES ---
         function switchMode(mode) {
             currentMode = mode;
-            // Gestionar botones
             ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
                 const btn = document.getElementById('tab-'+m);
-                btn.className = (m === mode) 
-                    ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap' 
-                    : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
+                btn.className = (m === mode) ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
             });
 
-            const searchUI = document.getElementById('search-ui');
-            const searchInput = document.getElementById('search-input');
-
             if (mode === 'search') {
-                searchUI.classList.remove('hidden');
+                document.getElementById('search-module').classList.remove('hidden');
                 document.getElementById('view-table').classList.add('hidden');
-                document.getElementById('view-cards').innerHTML = ''; // Limpiar
+                document.getElementById('view-cards').innerHTML = '';
                 document.getElementById('status-text').innerText = "Busca una carta...";
-                searchInput.focus();
+                document.getElementById('search-input').focus();
             } else {
-                searchUI.classList.add('hidden');
-                searchInput.value = ''; // Limpiar buscador al salir
+                document.getElementById('search-input').value = '';
                 loadData();
             }
         }
@@ -342,4 +333,19 @@
                 data: {
                     labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
                     datasets: [
-                        { label: 'USD', data: 
+                        { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3 },
+                        { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3 }
+                    ]
+                },
+                options: { maintainAspectRatio: false, scales: { y: { beginAtZero: false } } }
+            });
+        }
+
+        function showImage(url, e) {
+            e.stopPropagation();
+            document.getElementById('enlarged-image').src = url;
+            document.getElementById('image-modal').classList.remove('hidden');
+        }
+
+        function saveConfig() {
+            const u = docume

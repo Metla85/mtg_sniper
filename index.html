@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper Final</title>
+    <title>MTG Sniper V5 (Search)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -23,6 +23,11 @@
         .icon-group { display: flex; gap: 8px; justify-content: center; }
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.2s; }
         .icon-btn:hover { background-color: #e2e8f0; }
+        
+        /* Input de búsqueda animado */
+        .search-input { transition: all 0.3s; }
+        .search-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+        
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -31,9 +36,8 @@
     <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper</h2>
-            <p class="text-xs text-center text-gray-500 mb-4">Asegúrate de usar las claves del proyecto correcto.</p>
-            <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
-            <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
+            <input type="text" id="input-url" placeholder="URL" class="w-full p-3 border rounded-xl mb-3">
+            <input type="password" id="input-key" placeholder="Key" class="w-full p-3 border rounded-xl mb-4">
             <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">Entrar</button>
         </div>
     </div>
@@ -53,19 +57,33 @@
     </div>
 
     <div id="main-screen" class="max-w-6xl mx-auto opacity-0 transition-opacity duration-500">
-        <div class="mb-4 pt-2 flex justify-between items-center">
-            <h1 class="text-2xl font-black tracking-tight">MTG Sniper</h1>
-            <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
+        
+        <div class="mb-4 pt-2 flex flex-col gap-3 md:flex-row md:justify-between md:items-center">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="resetSearch()">MTG Sniper</h1>
+                <button onclick="resetConfig()" class="text-xl p-2 opacity-50 md:hidden">⚙️</button>
+            </div>
+            
+            <div class="relative w-full md:w-96">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <input type="text" id="search-box" class="search-input w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium placeholder-slate-400" placeholder="Buscar carta (min 3 letras)...">
+                <button id="clear-search" onclick="resetSearch()" class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-red-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <button onclick="resetConfig()" class="hidden md:block text-xl p-2 opacity-50">⚙️</button>
         </div>
 
-        <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200">
+        <div id="tabs-container" class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 transition-all duration-300">
             <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 font-bold text-sm uppercase active-tab">⚖️ Arbitraje</button>
             <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 font-bold text-sm uppercase inactive-tab">🚀 Tendencias</button>
             <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 font-bold text-sm uppercase inactive-tab">📈 Demanda</button>
         </div>
 
         <div class="flex justify-between items-center mb-4 px-1">
-            <p class="text-xs text-slate-500" id="status-text">Cargando...</p>
+            <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
             <button onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar Lista</button>
         </div>
 
@@ -95,7 +113,7 @@
         let supabase = null;
         let currentMode = 'arbitrage';
         let currentData = [];
-        let chartInstance = null;
+        let searchTimeout = null;
 
         function initApp() {
             const url = localStorage.getItem('supabase_url');
@@ -107,39 +125,89 @@
                 try {
                     supabase = window.supabase.createClient(url, key);
                     loadData();
+                    setupSearch();
                 } catch (e) {
-                    alert("Error en la configuración. Revisa tus claves.");
+                    alert("Error config");
                     resetConfig();
                 }
             }
         }
 
+        // --- SISTEMA DE BÚSQUEDA ---
+        function setupSearch() {
+            const searchBox = document.getElementById('search-box');
+            searchBox.addEventListener('input', (e) => {
+                const term = e.target.value.trim();
+                clearTimeout(searchTimeout);
+                
+                if (term.length >= 3) {
+                    searchTimeout = setTimeout(() => performSearch(term), 300); // Debounce 300ms
+                } else if (term.length === 0) {
+                    resetSearch(false); // Reset si borra todo
+                }
+            });
+        }
+
+        async function performSearch(term) {
+            currentMode = 'search';
+            document.getElementById('status-text').innerText = `🔍 Buscando "${term}"...`;
+            document.getElementById('clear-search').classList.remove('hidden');
+            
+            // Ocultar tabs visualmente para dar foco a la búsqueda
+            document.getElementById('tabs-container').classList.add('opacity-50', 'pointer-events-none');
+
+            const { data, error } = await supabase.rpc('search_cards', { keyword: term });
+
+            if (error) { alert("Error Búsqueda: " + error.message); return; }
+
+            currentData = data;
+            document.getElementById('status-text').innerText = `Resultados para "${term}": ${data.length}`;
+            document.getElementById('col-metric').innerText = 'Gap'; // En búsqueda mostramos Gap USD/EUR
+            renderTable();
+        }
+
+        function resetSearch(reload = true) {
+            document.getElementById('search-box').value = '';
+            document.getElementById('clear-search').classList.add('hidden');
+            document.getElementById('tabs-container').classList.remove('opacity-50', 'pointer-events-none');
+            
+            // Restaurar modo anterior
+            if (currentMode === 'search') {
+                switchMode('arbitrage'); // Vuelve al default
+            } else if (reload) {
+                // Si pulsan el título "MTG Sniper"
+                loadData();
+            }
+        }
+        // ---------------------------
+
         async function loadData() {
+            if (currentMode === 'search') return; // No cargar datos normales si estamos buscando
+
             document.getElementById('status-text').innerText = "Cargando...";
-            let rpcName;
+            let query;
             let metricLabel;
             
-            // Selección limpia de funciones RPC
             if (currentMode === 'arbitrage') {
-                rpcName = 'get_arbitrage_opportunities';
+                query = supabase.rpc('get_arbitrage_opportunities');
                 metricLabel = 'Gap';
             } else if (currentMode === 'trend') {
-                rpcName = 'get_us_spikes';
+                query = supabase.rpc('get_us_spikes');
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
-                rpcName = 'get_demand_spikes'; // Nombre estándar y limpio
+                query = supabase.from('demand_data').select('*').order('ratio', {ascending: false});
                 metricLabel = 'Demanda 7d';
             }
 
-            const { data, error } = await supabase.rpc(rpcName);
+            const { data, error } = await query;
             
-            if (error) { 
-                alert("Error API: " + error.message); 
-                return; 
+            if (error) { alert("Error API: " + error.message); return; }
+            
+            if (currentMode !== 'demand') {
+                currentData = data.sort((a, b) => b.ratio - a.ratio);
+            } else {
+                currentData = data;
             }
-            
-            // Ordenamos por Ratio (que en Demanda es la subida de 7 días)
-            currentData = data.sort((a, b) => b.ratio - a.ratio);
             
             document.getElementById('status-text').innerText = `${data.length} resultados`;
             document.getElementById('col-metric').innerText = metricLabel;
@@ -158,33 +226,28 @@
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
             
-            if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos hoy.</td></tr>`; return; }
+            if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`; return; }
 
             currentData.forEach((item, index) => {
                 let metricValue, metricClass;
                 
-                if (currentMode === 'arbitrage') {
-                    // MODO ARBITRAJE: Multiplicador (ej: 2.5x)
+                if (currentMode === 'search') {
+                    // En búsqueda, mostramos el Gap si vale la pena
+                    metricValue = item.ratio.toFixed(2) + 'x';
+                    metricClass = item.ratio > 1.5 ? 'ratio-high' : 'text-slate-500 bg-slate-50 px-2 py-1 rounded';
+                } else if (currentMode === 'arbitrage') {
                     metricValue = item.ratio.toFixed(2) + 'x';
                     metricClass = item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high';
-                
                 } else if (currentMode === 'trend') {
-                    // MODO TENDENCIA: Porcentaje Precio (ej: +40%)
                     metricValue = '+' + item.ratio.toFixed(1) + '%';
                     metricClass = 'ratio-high'; 
-                
                 } else if (currentMode === 'demand') {
-                    // MODO DEMANDA: Porcentaje de Velocidad (ej: +15% popularidad)
-                    // Usamos Math.round para limpiar decimales
                     metricValue = `+${Math.round(item.ratio)}%`;
-                    // Color Naranja/Ámbar específico para demanda
                     metricClass = 'bg-amber-100 text-amber-800 border border-amber-200 font-bold px-2 py-1 rounded'; 
                 }
                 
                 const currentRank = item.edhrec_rank && item.edhrec_rank > 0 ? `#${item.edhrec_rank}` : '—';
                 const rankChange = item.rank_change || 0;
-                
-                // Flechas de variación diaria
                 let rankChangeText = rankChange > 0 ? `▲ ${rankChange}` : (rankChange < 0 ? `▼ ${Math.abs(rankChange)}` : '—');
                 let rankChangeClass = rankChange > 0 ? 'rank-up' : (rankChange < 0 ? 'rank-down' : 'text-slate-400');
                 
@@ -199,7 +262,10 @@
                                 <div class="relative group cursor-pointer" onclick="showImageModal('${item.image_uri}', event)">
                                     <img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover">
                                 </div>
-                                <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
+                                <div>
+                                    <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
+                                    ${currentMode === 'search' ? `<div class="text-[10px] text-slate-400 font-mono">${item.set_code.toUpperCase()}</div>` : ''}
+                                </div>
                             </div>
                         </td>
                         <td class="px-2 py-3 text-center">
@@ -229,8 +295,8 @@
                 `;
                 tbody.insertAdjacentHTML('beforeend', row);
             });
-            }
-        
+        }
+
         async function showChart(index) {
             const item = currentData[index];
             document.getElementById('modal-title').innerText = item.name;
@@ -270,17 +336,4 @@
             });
         }
 
-        function showImageModal(url, e) { e.stopPropagation(); document.getElementById('enlarged-image').src = url; document.getElementById('image-modal').classList.remove('hidden'); }
-        function closeModal(e) { if (e.target.id === 'chart-modal') document.getElementById('chart-modal').classList.add('hidden'); }
-        function saveConfig() { localStorage.setItem('supabase_url', document.getElementById('input-url').value.trim()); localStorage.setItem('supabase_key', document.getElementById('input-key').value.trim()); location.reload(); }
-        function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.clear(); location.reload(); } }
-        function copyToClipboardSafe() {
-            const list = currentData.slice(0, 50).map(i => `1 ${i.name.split(' // ')[0]} (${i.set_code})`).join('\n');
-            const ta = document.createElement("textarea"); ta.value = list; ta.style.position="fixed"; ta.style.left="-9999px"; document.body.appendChild(ta); ta.focus(); ta.select();
-            document.execCommand('copy'); Toastify({ text: "✅ Copiado", duration: 2000, style: { background: "#4f46e5" } }).showToast(); document.body.removeChild(ta);
-        }
-
-        initApp();
-    </script>
-</body>
-</html>
+        function showImageModal(url, e) { e.stopPropagation(); document.getElementById('enlarged-image').src = url; document.getElementById('image-mod

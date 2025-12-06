@@ -257,18 +257,20 @@ function switchMode(mode) {
 async function openChart(i) {
     const item = currentData[i];
     
-    // ARREGLO CLAVE: Asegurarse de que el modal se muestra ANTES de dibujar
-    const modal = document.getElementById('chart-modal');
-    modal.classList.remove('hidden');
+    if (!item) { console.error("Error: Item no encontrado"); return; }
+
+    document.getElementById('modal-chart').classList.remove('hidden');
     document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
     
     if (chartInstance) chartInstance.destroy();
 
-    const { data } = await supabase.rpc('get_card_history', { target_card_name: item.name, target_set_code: item.set_code });
+    // AHORA USAMOS EL ID EXACTO (item.id)
+    // Esto evita que se mezclen versiones normales, foil, etc.
+    const { data } = await supabase.rpc('get_card_history', { target_card_id: item.id });
     
     if (!data || data.length === 0) {
-        alert("Sin historial.");
-        modal.classList.add('hidden');
+        alert("Sin historial para esta versión exacta.");
+        document.getElementById('modal-chart').classList.add('hidden');
         return;
     }
 
@@ -278,19 +280,23 @@ async function openChart(i) {
         data: {
             labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
             datasets: [
-                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3, pointRadius: 2 },
-                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 },
-                { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y1', hidden: false }
+                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, borderWidth: 2 },
+                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, borderWidth: 2 },
+                { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y1', hidden: false, borderWidth: 1 }
             ]
         },
         options: { 
             maintainAspectRatio: false,
-            responsive: true,
             interaction: { mode: 'index', intersect: false },
-            scales: { y: { beginAtZero: false, position: 'left' }, y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } } }
+            scales: { 
+                y: { beginAtZero: false, position: 'left', title: {display:true, text:'Precio'} }, 
+                y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false }, title: {display:true, text:'Rank'} } 
+            }
         }
     });
-}
+        }
+
+
 
 function showImage(url, e) {
     e.stopPropagation();

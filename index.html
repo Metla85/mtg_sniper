@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V8</title>
+    <title>MTG Sniper V8.1</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,25 +13,16 @@
     
     <style>
         body { -webkit-tap-highlight-color: transparent; }
-        
-        /* Pestañas */
         .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
         .inactive-tab { color: #64748b; }
-        
-        /* Badges y Colores */
         .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
-        
-        /* Botones de acción */
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
-        .icon-btn:hover { background-color: #e2e8f0; transform: scale(1.05); }
-
-        /* Estilos específicos para la FICHA DE CARTA (Búsqueda) */
+        .icon-btn:hover { background-color: #e2e8f0; }
         .card-sheet { transition: transform 0.2s; }
         .card-sheet:hover { transform: translateY(-2px); }
-        
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -39,10 +30,15 @@
 
     <div id="config-screen" class="fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar V8</h2>
-            <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
+            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper V8.1</h2>
+            <div id="login-msg" class="hidden mb-3 p-2 text-xs rounded text-center font-bold"></div>
+            
+            <input type="text" id="input-url" placeholder="Supabase URL (https://...)" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
             <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
-            <button onclick="tryLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800">Entrar</button>
+            
+            <button id="btn-login" onclick="verifyAndLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition">
+                Verificar y Entrar
+            </button>
         </div>
     </div>
 
@@ -55,7 +51,7 @@
             </div>
             
             <div class="relative w-full z-50">
-                <input type="text" id="search-input" class="w-full p-3 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none" placeholder="Buscar carta (ej: Mana Crypt)..." autocomplete="off">
+                <input type="text" id="search-input" class="w-full p-3 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none" placeholder="Buscar carta..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
                 <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 divide-y divide-slate-100 max-h-64 overflow-y-auto"></ul>
             </div>
@@ -92,42 +88,74 @@
             </div>
         </div>
 
-        <div id="cards-view" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            </div>
+        <div id="cards-view" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 
     </div>
 
     <div id="chart-modal" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onclick="document.getElementById('chart-modal').classList.add('hidden')">
         <div class="bg-white rounded-xl w-full max-w-3xl p-4 relative" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-4">
-                <h3 id="modal-title" class="font-bold text-lg">Historial de Precio</h3>
-                <button onclick="document.getElementById('chart-modal').classList.add('hidden')" class="text-2xl leading-none text-slate-400">&times;</button>
-            </div>
+            <h3 id="modal-title" class="font-bold text-lg mb-4">Historial</h3>
             <div class="h-64 md:h-80"><canvas id="priceChart"></canvas></div>
         </div>
     </div>
 
     <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
-        <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl">
+        <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg">
     </div>
 
     <script>
-        function tryLogin() {
+        // --- GESTIÓN DE LOGIN ROBUSTA ---
+        
+        // 1. Verificar credenciales ANTES de guardar
+        async function verifyAndLogin() {
             const u = document.getElementById('input-url').value.trim();
             const k = document.getElementById('input-key').value.trim();
-            if (!u || !k) return alert("Faltan datos");
+            const msg = document.getElementById('login-msg');
+            const btn = document.getElementById('btn-login');
+
+            if (!u || !k) return alert("Rellena ambos campos.");
+
+            // Feedback visual
+            btn.innerText = "Verificando conexión...";
+            btn.disabled = true;
+            msg.className = "mb-3 p-2 text-xs rounded text-center font-bold bg-yellow-100 text-yellow-700 block";
+            msg.innerText = "Conectando con Supabase...";
+
             try {
+                // Creamos un cliente temporal solo para probar
+                const tempClient = window.supabase.createClient(u, k);
+                
+                // Hacemos una petición mínima (ping)
+                const { data, error } = await tempClient.from('cards').select('id').limit(1);
+                
+                if (error) throw error;
+
+                // SI LLEGAMOS AQUÍ, TODO ESTÁ BIEN
+                msg.className = "mb-3 p-2 text-xs rounded text-center font-bold bg-green-100 text-green-700 block";
+                msg.innerText = "¡Conexión exitosa! Guardando...";
+                
                 localStorage.setItem('sb_url', u);
                 localStorage.setItem('sb_key', k);
-                window.location.reload();
-            } catch (e) { alert("Error: " + e.message); }
-        }
-        function doLogout() {
-            if(confirm("¿Salir?")) { localStorage.clear(); window.location.reload(); }
-        }
-    </script>
+                
+                setTimeout(() => window.location.reload(), 500);
 
-    <script>
+            } catch (e) {
+                // SI FALLA, AVISAMOS PERO NO GUARDAMOS NADA
+                msg.className = "mb-3 p-2 text-xs rounded text-center font-bold bg-red-100 text-red-700 block";
+                msg.innerText = "Error: " + e.message;
+                btn.innerText = "Verificar y Entrar";
+                btn.disabled = false;
+            }
+        }
+
+        function doLogout() {
+            if(confirm("¿Cerrar sesión y borrar claves del móvil?")) { 
+                localStorage.clear(); 
+                window.location.reload(); 
+            }
+        }
+
+        // --- LÓGICA PRINCIPAL ---
         let sb = null;
         let mode = 'arbitrage';
         let dataList = [];
@@ -139,34 +167,39 @@
             const key = localStorage.getItem('sb_key');
 
             if (!url || !key) {
+                // No hay claves, mostrar login
                 document.getElementById('config-screen').classList.remove('hidden');
             } else {
+                // Hay claves, mostrar app
                 document.getElementById('config-screen').classList.add('hidden');
                 document.getElementById('main-screen').classList.remove('hidden');
                 
-                if (typeof window.supabase === 'undefined') return alert("Error: Librerías no cargadas.");
+                // Si la librería falla
+                if (typeof window.supabase === 'undefined') {
+                    alert("Error: No se ha cargado la librería Supabase. Revisa tu internet.");
+                    return;
+                }
 
                 try {
                     sb = window.supabase.createClient(url, key);
                     initSearch();
                     loadData();
                 } catch (e) {
-                    alert("Error conexión. Revisa claves.");
-                    localStorage.clear();
-                    window.location.reload();
+                    // Si falla aquí, NO borramos claves automáticamente. Mostramos error.
+                    document.getElementById('status-text').innerText = "Error de Configuración";
+                    document.getElementById('status-text').className = "text-sm font-bold text-red-600";
+                    alert("Error iniciando cliente: " + e.message + "\nPrueba a salir y volver a entrar.");
                 }
             }
         });
 
-        // --- CARGA DE DATOS ---
         async function loadData() {
-            if (mode === 'search') return; // En búsqueda no cargamos automático
+            if (mode === 'search') return;
 
             const status = document.getElementById('status-text');
             status.innerText = "Cargando...";
             status.className = "text-sm font-bold text-indigo-600 animate-pulse";
             
-            // Mostrar Tabla, Ocultar Fichas
             document.getElementById('table-view').classList.remove('hidden');
             document.getElementById('cards-view').classList.add('hidden');
             document.getElementById('view-mode-indicator').innerText = "Vista: Tabla";
@@ -181,8 +214,10 @@
             const { data, error } = await sb.rpc(rpc);
 
             if (error) {
-                status.innerText = "Error API";
+                status.innerText = "Error de Conexión";
                 status.className = "text-sm font-bold text-red-600";
+                console.error(error);
+                // NO borramos claves, solo avisamos
                 return;
             }
 
@@ -196,13 +231,11 @@
             renderTable();
         }
 
-        // --- RENDERIZADO TABLA (Modo Normal) ---
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
 
             dataList.forEach((item, i) => {
-                // Formateo de métricas
                 let val, color;
                 if (mode === 'arbitrage') { val = item.ratio.toFixed(2)+'x'; color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; }
                 else if (mode === 'trend') { val = '+'+item.ratio.toFixed(0)+'%'; color = 'ratio-high'; }
@@ -234,8 +267,8 @@
                     <td class="px-4 py-3 text-center text-xs font-bold">${arrow}</td>
                     <td class="px-4 py-3 text-center">
                         <div class="flex justify-center gap-2">
-                            <button onclick="openChart(${i})" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">📊</button>
-                            <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="Comprar">🛒</a>
+                            <button onclick="openChart(${i})" class="icon-btn text-blue-600 hover:bg-blue-50">📊</button>
+                            <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50">🛒</a>
                         </div>
                     </td>
                 `;
@@ -243,20 +276,17 @@
             });
         }
 
-        // --- RENDERIZADO FICHAS (Modo Búsqueda) ---
         async function doSearch(term) {
             document.getElementById('suggestions-list').classList.add('hidden');
             document.getElementById('search-input').value = term;
             document.getElementById('status-text').innerText = "Buscando...";
             
-            // Ocultar Tabla -> Mostrar Grid de Fichas
             document.getElementById('table-view').classList.add('hidden');
             const cardView = document.getElementById('cards-view');
             cardView.classList.remove('hidden');
-            cardView.innerHTML = ''; // Limpiar
-            document.getElementById('view-mode-indicator').innerText = "Vista: Ficha Detallada";
+            cardView.innerHTML = ''; 
+            document.getElementById('view-mode-indicator').innerText = "Vista: Ficha";
 
-            // Desactivar pestañas
             document.querySelectorAll('button[id^="btn-"]').forEach(b => b.className = b.className.replace('active-tab', 'inactive-tab'));
 
             const { data } = await sb.rpc('search_cards', { keyword: term });
@@ -267,7 +297,6 @@
                 const card = document.createElement('div');
                 card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
                 
-                // Calculamos Gap para mostrarlo
                 let gapBadge = '';
                 if(item.ratio > 1.5) gapBadge = `<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">Gap: ${item.ratio.toFixed(2)}x</span>`;
 
@@ -276,13 +305,11 @@
                         <div class="w-1/3 min-w-[100px] cursor-pointer" onclick="openImage('${item.image_uri}', event)">
                             <img src="${item.image_uri}" class="w-full rounded-lg shadow-md hover:opacity-90 transition">
                         </div>
-                        
                         <div class="w-2/3 flex flex-col gap-2">
                             <div>
                                 <h3 class="font-black text-lg leading-tight text-slate-800">${item.name}</h3>
                                 <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">${item.set_code}</div>
                             </div>
-                            
                             <div class="grid grid-cols-2 gap-2 mt-2">
                                 <div class="bg-slate-50 p-2 rounded border border-slate-100 text-center">
                                     <div class="text-[10px] text-slate-400 uppercase font-bold">EUR</div>
@@ -293,28 +320,21 @@
                                     <div class="font-mono font-bold text-lg text-slate-500">$${(item.usd||0).toFixed(2)}</div>
                                 </div>
                             </div>
-
                             <div class="flex justify-between items-center mt-2">
                                 <div class="text-xs text-slate-500 font-mono">Rank: #${item.edhrec_rank||'?'}</div>
                                 ${gapBadge}
                             </div>
                         </div>
                     </div>
-                    
                     <div class="bg-slate-50 p-3 border-t border-slate-100 flex justify-between items-center">
-                        <button onclick="openChart(${i})" class="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
-                            📊 Ver Gráfica
-                        </button>
-                        <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">
-                            Comprar en MKM
-                        </a>
+                        <button onclick="openChart(${i})" class="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">📊 Ver Gráfica</button>
+                        <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">Comprar en MKM</a>
                     </div>
                 `;
                 cardView.appendChild(card);
             });
         }
 
-        // --- SISTEMA DE PESTAÑAS Y BUSCADOR ---
         function setMode(m) {
             mode = m;
             ['arbitrage', 'trend', 'demand'].forEach(x => {
@@ -323,7 +343,6 @@
                     ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab'
                     : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
             });
-            // Al cambiar de pestaña, volvemos a la vista de tabla
             document.getElementById('suggestions-list').classList.add('hidden');
             document.getElementById('search-input').value = '';
             loadData();
@@ -339,27 +358,4 @@
                 if (txt.length < 3) { list.classList.add('hidden'); return; }
 
                 searchTimer = setTimeout(async () => {
-                    const { data } = await sb.rpc('search_cards', { keyword: txt });
-                    if (!data || !data.length) { list.classList.add('hidden'); return; }
-
-                    const uniques = [...new Set(data.map(i => i.name))].slice(0, 10);
-                    list.innerHTML = '';
-                    uniques.forEach(name => {
-                        const li = document.createElement('li');
-                        li.className = 'p-3 border-b text-sm font-medium hover:bg-indigo-50 cursor-pointer flex items-center gap-2';
-                        li.innerHTML = `<span class="text-indigo-400">🔍</span> ${name}`;
-                        li.onclick = () => doSearch(name);
-                        list.appendChild(li);
-                    });
-                    list.classList.remove('hidden');
-                }, 300);
-            });
-            
-            // Cerrar al hacer click fuera
-            document.addEventListener('click', (e) => {
-                if(!input.contains(e.target) && !list.contains(e.target)) list.classList.add('hidden');
-            });
-        }
-
-        // --- UTILIDADES ---
-        async function openChart(
+                    const { data } =

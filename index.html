@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MTG Sniper Final</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    
     <style>
         body { -webkit-tap-highlight-color: transparent; }
         .card-row:hover { background-color: #f8fafc; cursor: pointer; }
@@ -29,8 +31,9 @@
     <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper</h2>
-            <input type="text" id="input-url" placeholder="URL" class="w-full p-3 border rounded-xl mb-3">
-            <input type="password" id="input-key" placeholder="Key" class="w-full p-3 border rounded-xl mb-4">
+            <p class="text-xs text-center text-gray-500 mb-4">Asegúrate de usar las claves del proyecto correcto.</p>
+            <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
+            <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
             <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">Entrar</button>
         </div>
     </div>
@@ -101,41 +104,42 @@
             else {
                 document.getElementById('config-screen').classList.add('hidden');
                 document.getElementById('main-screen').classList.remove('opacity-0');
-                supabase = window.supabase.createClient(url, key);
-                loadData();
+                try {
+                    supabase = window.supabase.createClient(url, key);
+                    loadData();
+                } catch (e) {
+                    alert("Error en la configuración. Revisa tus claves.");
+                    resetConfig();
+                }
             }
         }
 
         async function loadData() {
             document.getElementById('status-text').innerText = "Cargando...";
-            let query;
+            let rpcName;
             let metricLabel;
             
+            // Selección limpia de funciones RPC
             if (currentMode === 'arbitrage') {
-                query = supabase.rpc('get_arbitrage_opportunities');
+                rpcName = 'get_arbitrage_opportunities';
                 metricLabel = 'Gap';
             } else if (currentMode === 'trend') {
-                query = supabase.rpc('get_us_spikes');
+                rpcName = 'get_us_spikes';
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
-                // ATENCIÓN: Nombre actualizado a 'demand_data'
-                // Leemos de la tabla física SNAPSHOT
-                query = supabase.from('demand_snapshot').select('*').order('ratio', {ascending: false});
+                rpcName = 'get_demand_spikes'; // Nombre estándar y limpio
                 metricLabel = 'Demanda 7d';
             }
 
-            const { data, error } = await query;
+            const { data, error } = await supabase.rpc(rpcName);
             
             if (error) { 
                 alert("Error API: " + error.message); 
                 return; 
             }
             
-            if (currentMode !== 'demand') {
-                currentData = data.sort((a, b) => b.ratio - a.ratio);
-            } else {
-                currentData = data;
-            }
+            // Ordenamos por Ratio (que en Demanda es la subida de 7 días)
+            currentData = data.sort((a, b) => b.ratio - a.ratio);
             
             document.getElementById('status-text').innerText = `${data.length} resultados`;
             document.getElementById('col-metric').innerText = metricLabel;
@@ -230,24 +234,37 @@
 
             if (!history || history.length === 0) return;
 
+            const labels = history.map(h => new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'}));
+            const dataEur = history.map(h => h.eur);
+            const dataUsd = history.map(h => h.usd);
+            const dataRank = history.map(h => h.edhrec_rank);
+
             const ctx = document.getElementById('priceChart').getContext('2d');
             chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: history.map(h => new Date(h.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'})),
+                    labels: labels,
                     datasets: [
-                        { label: 'USA $', data: history.map(h => h.usd), borderColor: '#3b82f6', tension: 0.4 },
-                        { label: 'EUR €', data: history.map(h => h.eur), borderColor: '#22c55e', tension: 0.4 }
+                        { label: 'USA $', data: dataUsd, yAxisID: 'y-price', borderColor: '#3b82f6', tension: 0.4 },
+                        { label: 'EUR €', data: dataEur, yAxisID: 'y-price', borderColor: '#22c55e', tension: 0.4 },
+                        { label: 'Rank', data: dataRank, yAxisID: 'y-rank', borderColor: '#8b5cf6', borderDash: [5,5], tension: 0.4 }
                     ]
                 },
-                options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false } }
+                options: { 
+                    maintainAspectRatio: false, 
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        'y-price': { type: 'linear', display: true, position: 'left' },
+                        'y-rank': { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } }
+                    }
+                }
             });
         }
 
         function showImageModal(url, e) { e.stopPropagation(); document.getElementById('enlarged-image').src = url; document.getElementById('image-modal').classList.remove('hidden'); }
         function closeModal(e) { if (e.target.id === 'chart-modal') document.getElementById('chart-modal').classList.add('hidden'); }
         function saveConfig() { localStorage.setItem('supabase_url', document.getElementById('input-url').value.trim()); localStorage.setItem('supabase_key', document.getElementById('input-key').value.trim()); location.reload(); }
-        function resetConfig() { localStorage.clear(); location.reload(); }
+        function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.clear(); location.reload(); } }
         function copyToClipboardSafe() {
             const list = currentData.slice(0, 50).map(i => `1 ${i.name.split(' // ')[0]} (${i.set_code})`).join('\n');
             const ta = document.createElement("textarea"); ta.value = list; ta.style.position="fixed"; ta.style.left="-9999px"; document.body.appendChild(ta); ta.focus(); ta.select();

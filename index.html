@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V9</title>
+    <title>MTG Sniper V10</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -19,10 +19,8 @@
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
-        .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
-        .icon-btn:hover { background-color: #e2e8f0; }
-        .card-sheet { transition: transform 0.2s; }
-        .card-sheet:hover { transform: translateY(-2px); }
+        .card-sheet:hover { transform: translateY(-2px); transition: transform 0.2s; }
+        #suggestions-list { max-height: 200px; overflow-y: auto; z-index: 50; }
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -30,27 +28,24 @@
 
     <div id="config-screen" class="fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper V9</h2>
-            
-            <div id="login-log" class="hidden mb-3 p-2 text-xs rounded border bg-gray-50 font-mono text-left overflow-auto max-h-20"></div>
+            <h2 class="text-xl font-bold text-center mb-4">Conectar V10</h2>
+            <div id="login-msg" class="hidden mb-3 p-2 text-xs rounded bg-red-100 text-red-700 text-center font-bold"></div>
             
             <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
             <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
             
-            <button id="btn-login" onclick="attemptLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition">
+            <button id="btn-login" onclick="SYSTEM_LOGIN()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition">
                 Entrar
             </button>
         </div>
     </div>
 
     <div id="main-screen" class="hidden max-w-6xl mx-auto pb-20">
-        
         <div class="mb-4 pt-2 flex flex-col gap-3">
             <div class="flex justify-between items-center px-1">
                 <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
-                <button onclick="doLogout()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
+                <button onclick="SYSTEM_LOGOUT()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
             </div>
-            
             <div class="relative w-full z-50">
                 <input type="text" id="search-input" class="w-full p-3 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none" placeholder="Buscar carta..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
@@ -98,92 +93,102 @@
             <div class="h-64 md:h-80"><canvas id="priceChart"></canvas></div>
         </div>
     </div>
-
     <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
         <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg">
     </div>
 
     <script>
-        // --- GESTIÓN DE SESIÓN SIN RECARGAS ---
-        let sb = null; // Cliente global
+        // Función Global de Login
+        window.SYSTEM_LOGIN = function() {
+            const btn = document.getElementById('btn-login');
+            const msg = document.getElementById('login-msg');
+            const u = document.getElementById('input-url').value.trim();
+            const k = document.getElementById('input-key').value.trim();
+
+            if (!u || !k) {
+                msg.innerText = "Faltan datos";
+                msg.classList.remove('hidden');
+                return;
+            }
+
+            btn.innerText = "Verificando...";
+            btn.disabled = true;
+
+            // Verificación simple: ¿Existe Supabase?
+            if (typeof window.supabase === 'undefined') {
+                msg.innerText = "Error: Librería no cargada. Revisa internet.";
+                msg.classList.remove('hidden');
+                btn.disabled = false;
+                return;
+            }
+
+            try {
+                // Intentamos conectar
+                const tempClient = window.supabase.createClient(u, k);
+                // Ping simple
+                tempClient.from('cards').select('id').limit(1).then(({ error }) => {
+                    if (error) {
+                        throw error;
+                    }
+                    // ÉXITO
+                    localStorage.setItem('sb_url', u);
+                    localStorage.setItem('sb_key', k);
+                    location.reload(); // Recarga limpia
+                }).catch(err => {
+                    msg.innerText = "Error conexión: " + err.message;
+                    msg.classList.remove('hidden');
+                    btn.innerText = "Entrar";
+                    btn.disabled = false;
+                });
+            } catch (e) {
+                msg.innerText = "Error crítico: " + e.message;
+                msg.classList.remove('hidden');
+                btn.disabled = false;
+            }
+        };
+
+        window.SYSTEM_LOGOUT = function() {
+            if(confirm("¿Salir?")) { localStorage.clear(); location.reload(); }
+        };
+
+        // Autologin al inicio
+        (function() {
+            const u = localStorage.getItem('sb_url');
+            const k = localStorage.getItem('sb_key');
+            if (u && k) {
+                document.getElementById('config-screen').classList.add('hidden');
+                document.getElementById('main-screen').classList.remove('hidden');
+                // Disparamos evento para iniciar la app principal
+                setTimeout(() => window.dispatchEvent(new Event('APP_READY')), 100);
+            } else {
+                document.getElementById('config-screen').classList.remove('hidden');
+            }
+        })();
+    </script>
+
+    <script>
+        let sb = null;
         let mode = 'arbitrage';
         let dataList = [];
         let searchTimer = null;
         let chartInstance = null;
 
-        // Intentar autologin al cargar
-        document.addEventListener('DOMContentLoaded', () => {
-            const u = localStorage.getItem('sb_url');
-            const k = localStorage.getItem('sb_key');
-            if (u && k) {
-                log("Intentando autologin...");
-                startApp(u, k);
-            } else {
-                document.getElementById('config-screen').classList.remove('hidden');
-            }
-        });
-
-        // Función de Login Manual
-        async function attemptLogin() {
-            const u = document.getElementById('input-url').value.trim();
-            const k = document.getElementById('input-key').value.trim();
-            const btn = document.getElementById('btn-login');
-
-            if (!u || !k) return logError("Faltan datos");
-
-            btn.disabled = true;
-            btn.innerText = "Conectando...";
-            logError(""); // Limpiar errores
-
-            // INICIO SEGURO: Probamos conexión ANTES de cambiar de pantalla
-            try {
-                const tempClient = window.supabase.createClient(u, k);
-                const { error } = await tempClient.from('cards').select('id').limit(1); // Ping simple
-                
-                if (error) throw error;
-
-                // SI ES ÉXITO: Guardamos y arrancamos SIN RECARGAR
-                localStorage.setItem('sb_url', u);
-                localStorage.setItem('sb_key', k);
-                startApp(u, k);
-
-            } catch (e) {
-                logError("Error: " + e.message);
-                btn.disabled = false;
-                btn.innerText = "Entrar";
-            }
-        }
-
-        // Arrancar la app (Ocultar login, mostrar main)
-        function startApp(url, key) {
+        window.addEventListener('APP_READY', () => {
+            const url = localStorage.getItem('sb_url');
+            const key = localStorage.getItem('sb_key');
+            
             try {
                 sb = window.supabase.createClient(url, key);
-                document.getElementById('config-screen').classList.add('hidden');
-                document.getElementById('main-screen').classList.remove('hidden');
                 initSearch();
                 loadData();
             } catch (e) {
-                logError("Fallo crítico al iniciar cliente: " + e.message);
-                document.getElementById('config-screen').classList.remove('hidden');
-                document.getElementById('main-screen').classList.add('hidden');
+                alert("Error iniciando App: " + e.message);
+                localStorage.clear();
+                location.reload();
             }
-        }
+        });
 
-        function logError(msg) {
-            const el = document.getElementById('login-log');
-            if (!msg) { el.classList.add('hidden'); return; }
-            el.classList.remove('hidden');
-            el.innerText = msg;
-            el.className = "mb-3 p-2 text-xs rounded border bg-red-100 text-red-700 font-mono block";
-        }
-        
-        function log(msg) { console.log(msg); }
-
-        function doLogout() {
-            if(confirm("¿Cerrar sesión?")) { localStorage.clear(); location.reload(); }
-        }
-
-        // --- LÓGICA DE DATOS ---
+        // --- CARGA DE DATOS ---
         async function loadData() {
             if (mode === 'search') return;
 
@@ -205,7 +210,6 @@
             if (error) {
                 status.innerText = "Error API";
                 status.className = "text-sm font-bold text-red-600";
-                alert("Error cargando datos: " + error.message);
                 return;
             }
 
@@ -219,6 +223,7 @@
             renderTable();
         }
 
+        // --- RENDERIZADO TABLA ---
         function renderTable() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
@@ -303,7 +308,6 @@
             cardView.innerHTML = ''; 
             document.getElementById('view-mode-indicator').innerText = "Vista: Ficha";
 
-            // Desmarcar Tabs
             ['arbitrage', 'trend', 'demand'].forEach(x => {
                 document.getElementById('btn-'+x).className = 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
             });
@@ -356,6 +360,4 @@
             mode = m;
             ['arbitrage', 'trend', 'demand'].forEach(x => {
                 const b = document.getElementById('btn-'+x);
-                b.className = (x === m) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
-            });
-         
+                b.className = (x === m) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab' : 'flex-1 py-3 px-2 text-xs font-bold uppercase in

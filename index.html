@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V4</title>
+    <title>MTG Sniper Final</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -20,12 +20,9 @@
         .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
         .inactive-tab { color: #64748b; }
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
-        
-        /* Estilos de botones e iconos restaurados */
         .icon-group { display: flex; gap: 8px; justify-content: center; }
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: background 0.2s; }
         .icon-btn:hover { background-color: #e2e8f0; }
-
         @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
@@ -33,7 +30,7 @@
 
     <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper V4</h2>
+            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper Final</h2>
             <input type="text" id="input-url" placeholder="URL" class="w-full p-3 border rounded-xl mb-3">
             <input type="password" id="input-key" placeholder="Key" class="w-full p-3 border rounded-xl mb-4">
             <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">Entrar</button>
@@ -55,7 +52,6 @@
     </div>
 
     <div id="main-screen" class="max-w-6xl mx-auto opacity-0 transition-opacity duration-500">
-        
         <div class="mb-4 pt-2 flex justify-between items-center">
             <h1 class="text-2xl font-black tracking-tight">MTG Sniper</h1>
             <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
@@ -91,6 +87,7 @@
                 </table>
             </div>
         </div>
+        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en la foto para ampliar.</p>
     </div>
 
     <script>
@@ -116,7 +113,6 @@
             let query;
             let metricLabel;
             
-            // ESTRATEGIA HÍBRIDA
             if (currentMode === 'arbitrage') {
                 query = supabase.rpc('get_arbitrage_opportunities');
                 metricLabel = 'Gap';
@@ -124,8 +120,8 @@
                 query = supabase.rpc('get_us_spikes');
                 metricLabel = 'Subida %';
             } else if (currentMode === 'demand') {
-                // LECTURA DIRECTA DE TABLA (Corrige error de caché)
-                query = supabase.from('edhrec_demand_spikes').select('*').order('ratio', {ascending: false});
+                // NUEVO RECURSO: market_demand_v1
+                query = supabase.from('market_demand_v1').select('*').order('ratio', {ascending: false});
                 metricLabel = 'Demanda 7d';
             }
 
@@ -263,4 +259,5 @@
         initApp();
     </script>
 </body>
-</html>
+    </html>
+    

@@ -3,374 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V6.1</title>
+    <title>MTG Sniper V7 Debug</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     
     <style>
         body { -webkit-tap-highlight-color: transparent; }
-        .card-row:hover { background-color: #f8fafc; cursor: pointer; }
-        .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
-        .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
-        .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
         .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
         .inactive-tab { color: #64748b; }
         .rank-up { color: #10b981; } .rank-down { color: #ef4444; }
-        .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
-        .icon-btn:hover { background-color: #e2e8f0; }
-        #suggestions-list { max-height: 200px; overflow-y: auto; z-index: 50; }
-        @media (max-width: 640px) { .hide-mobile { display: none; } body { padding: 0.5rem; } }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
 
+    <div id="debug-console" class="hidden fixed top-0 left-0 w-full bg-black text-lime-400 p-2 text-xs font-mono z-[2000] border-b-2 border-red-500 overflow-y-auto max-h-32">
+        <div class="flex justify-between"><span>DEBUG LOG:</span> <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="text-white">X</button></div>
+    </div>
+
     <div id="config-screen" class="fixed inset-0 bg-slate-900 z-[999] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper V6.1</h2>
-            <div id="login-error" class="hidden bg-red-100 text-red-700 p-2 rounded mb-3 text-xs"></div>
+            <h2 class="text-xl font-bold text-center mb-4">Conectar V7</h2>
+            <p class="text-xs text-red-500 mb-2 hidden" id="login-msg"></p>
             
-            <label class="block text-xs font-bold text-slate-500 mb-1">Project URL</label>
-            <input type="text" id="input-url" placeholder="https://xyz.supabase.co" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm bg-slate-50">
+            <input type="text" id="input-url" placeholder="URL (https://...)" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
+            <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
             
-            <label class="block text-xs font-bold text-slate-500 mb-1">Anon Key</label>
-            <input type="password" id="input-key" placeholder="eyJhbGci..." class="w-full p-3 border rounded-xl mb-4 font-mono text-sm bg-slate-50">
-            
-            <button id="btn-login" onclick="manualLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800 transition-colors">
+            <button onclick="tryLogin()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl active:bg-indigo-800">
                 Entrar
             </button>
         </div>
     </div>
 
-    <div id="main-screen" class="hidden max-w-6xl mx-auto">
-        <div class="mb-4 pt-2 flex flex-col gap-3">
-            <div class="flex justify-between items-center">
-                <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="window.location.reload()">MTG Sniper</h1>
-                <button onclick="hardReset()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200">Salir</button>
-            </div>
-            <div class="relative w-full">
-                <input type="text" id="search-input" class="w-full p-3 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 outline-none" placeholder="Buscar carta..." autocomplete="off">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
-                <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 divide-y divide-slate-100"></ul>
-            </div>
+    <div id="main-screen" class="hidden max-w-6xl mx-auto pb-10">
+        <div class="p-2 flex justify-between items-center">
+            <h1 class="text-2xl font-black">MTG Sniper</h1>
+            <button onclick="doLogout()" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Salir</button>
         </div>
 
-        <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
-            <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap">⚖️ Arbitraje</button>
-            <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">🚀 Tendencias</button>
-            <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">📈 Demanda</button>
-            <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
+        <div class="px-2 mb-4 relative">
+            <input type="text" id="search-input" class="w-full p-3 border rounded-xl shadow-sm" placeholder="Buscar carta...">
+            <ul id="suggestions-list" class="hidden absolute w-full bg-white border mt-1 shadow-xl z-50 max-h-48 overflow-y-auto"></ul>
         </div>
 
-        <div class="flex justify-between items-center mb-4 px-1">
-            <p class="text-sm font-bold text-indigo-600" id="status-text">Iniciando...</p>
-            <button onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar</button>
+        <div class="flex mb-2 bg-white shadow-sm overflow-x-auto">
+            <button onclick="setMode('arbitrage')" id="btn-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab">Arbitraje</button>
+            <button onclick="setMode('trend')" id="btn-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab">Tendencias</button>
+            <button onclick="setMode('demand')" id="btn-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab">Demanda</button>
         </div>
 
-        <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200 min-h-[200px]">
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold">
-                        <tr>
-                            <th class="px-4 py-3 text-left">Carta</th>
-                            <th class="px-2 py-3 text-center">Set</th>
-                            <th class="px-4 py-3 text-right">EUR</th>
-                            <th class="hide-mobile px-4 py-3 text-right">USD</th>
-                            <th class="px-4 py-3 text-center" id="col-metric">Gap</th>
-                            <th class="px-4 py-3 text-center">Rank</th>
-                            <th class="px-4 py-3 text-center">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="table-body"></tbody>
-                </table>
-            </div>
+        <div class="px-2 mb-2 flex justify-between text-sm">
+            <span id="status-text" class="font-bold text-indigo-600">Listo</span>
+            <span id="metric-header" class="text-gray-500">Gap</span>
+        </div>
+
+        <div class="bg-white shadow overflow-hidden">
+            <table class="w-full text-sm">
+                <thead class="bg-slate-100 text-xs uppercase font-bold text-slate-500">
+                    <tr>
+                        <th class="px-3 py-2 text-left">Carta</th>
+                        <th class="px-2 py-2 text-right">EUR</th>
+                        <th class="px-2 py-2 text-center" id="col-head-metric">Gap</th>
+                        <th class="px-2 py-2 text-center">Acc</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
         </div>
     </div>
 
-    <div id="chart-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onclick="document.getElementById('chart-modal').classList.add('hidden')">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden p-4 relative" onclick="event.stopPropagation()">
-            <h3 id="modal-title" class="font-bold text-lg mb-2">Historial</h3>
-            <div class="h-64"><canvas id="priceChart"></canvas></div>
+    <div id="modal-chart" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+        <div class="bg-white w-full rounded-xl p-2 h-64" onclick="event.stopPropagation()">
+            <canvas id="chart-canvas"></canvas>
         </div>
-    </div>
-
-    <div id="image-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
-        <img id="enlarged-image" class="max-w-full max-h-full object-contain">
     </div>
 
     <script>
-        // --- GESTIÓN DE LOGIN (PRIMERO, PARA QUE NO FALLE) ---
-        function manualLogin() {
-            const urlInput = document.getElementById('input-url');
-            const keyInput = document.getElementById('input-key');
-            const errorBox = document.getElementById('login-error');
+        // Captura de errores global
+        window.onerror = function(msg, url, line) {
+            const consoleBox = document.getElementById('debug-console');
+            consoleBox.classList.remove('hidden');
+            consoleBox.innerHTML += `<div>❌ ${msg} (Línea ${line})</div>`;
+            return false;
+        };
 
-            const u = urlInput.value.trim();
-            const k = keyInput.value.trim();
-
-            if (!u || !k) {
-                alert("Por favor, introduce la URL y la Key.");
-                return;
-            }
+        // Función de Login Robusta
+        function tryLogin() {
+            const u = document.getElementById('input-url').value.trim();
+            const k = document.getElementById('input-key').value.trim();
             
-            if (!u.startsWith('https://')) {
-                alert("La URL debe empezar por https://");
+            if (!u || !k) {
+                alert("Faltan datos");
                 return;
             }
-
             try {
-                // Guardar y Recargar
-                localStorage.setItem('supabase_url', u);
-                localStorage.setItem('supabase_key', k);
+                localStorage.setItem('sb_url', u);
+                localStorage.setItem('sb_key', k);
                 window.location.reload();
             } catch (e) {
-                alert("Error guardando datos: " + e.message);
+                alert("Error guardando: " + e.message);
             }
         }
 
-        function hardReset() {
-            if(confirm("¿Cerrar sesión y borrar datos?")) {
+        function doLogout() {
+            if(confirm("¿Salir?")) {
                 localStorage.clear();
                 window.location.reload();
             }
         }
+    </script>
 
-        // --- LÓGICA DE LA APP ---
-        let supabase = null;
-        let currentMode = 'arbitrage';
-        let currentData = [];
-        let searchTimeout = null;
-        let chartInstance = null;
+    <script>
+        let sb = null;
+        let mode = 'arbitrage';
+        let dataList = [];
+        let chartObj = null;
+        let searchTimer = null;
 
-        window.addEventListener('DOMContentLoaded', () => {
-            // Comprobación de seguridad
-            if (typeof window.supabase === 'undefined') {
-                document.body.innerHTML = '<div class="p-8 text-center text-red-600 font-bold">Error Crítico: No se pudo cargar la librería de Supabase.<br>Revisa tu conexión a internet.</div>';
-                return;
-            }
-            initApp();
-        });
+        // Inicio
+        document.addEventListener('DOMContentLoaded', async () => {
+            const url = localStorage.getItem('sb_url');
+            const key = localStorage.getItem('sb_key');
 
-        function initApp() {
-            const url = localStorage.getItem('supabase_url');
-            const key = localStorage.getItem('supabase_key');
-            
             if (!url || !key) {
-                // Mostrar Login
                 document.getElementById('config-screen').classList.remove('hidden');
-                document.getElementById('main-screen').classList.add('hidden');
             } else {
-                // Mostrar App
                 document.getElementById('config-screen').classList.add('hidden');
                 document.getElementById('main-screen').classList.remove('hidden');
                 
+                // Comprobamos Supabase
+                if (typeof window.supabase === 'undefined') {
+                    throw new Error("Librería Supabase no cargada");
+                }
+                
                 try {
-                    supabase = window.supabase.createClient(url, key);
-                    setupAutocomplete();
-                    loadData();
+                    sb = window.supabase.createClient(url, key);
+                    await loadData(); // Cargar datos iniciales
+                    initSearch();     // Activar buscador
                 } catch (e) {
-                    alert("Tus claves parecen incorrectas. Reiniciando...");
-                    hardReset();
+                    alert("Error conexión: " + e.message);
+                    document.getElementById('debug-console').classList.remove('hidden');
+                    document.getElementById('debug-console').innerHTML += `<div>CONEXIÓN: ${e.message}</div>`;
                 }
             }
-        }
+        });
 
         async function loadData() {
-            if (currentMode === 'search') return;
-
-            const statusEl = document.getElementById('status-text');
-            statusEl.innerText = "Cargando...";
-            statusEl.className = "text-sm font-bold text-indigo-600 animate-pulse";
+            const status = document.getElementById('status-text');
+            status.innerText = "Cargando...";
             
-            let query;
-            let metricLabel;
+            let rpc = '';
+            if (mode === 'arbitrage') rpc = 'get_arbitrage_opportunities';
+            else if (mode === 'trend') rpc = 'get_us_spikes';
+            else if (mode === 'demand') rpc = 'get_demand_spikes';
 
-            try {
-                if (currentMode === 'arbitrage') {
-                    query = supabase.rpc('get_arbitrage_opportunities');
-                    metricLabel = 'Gap';
-                } else if (currentMode === 'trend') {
-                    query = supabase.rpc('get_us_spikes');
-                    metricLabel = 'Subida %';
-                } else if (currentMode === 'demand') {
-                    // LLAMADA A LA VISTA REPARADA
-                    query = supabase.rpc('get_demand_spikes');
-                    metricLabel = 'Demanda 7d';
-                }
+            const { data, error } = await sb.rpc(rpc);
 
-                const { data, error } = await query;
-                if (error) throw error;
-
-                currentData = data || [];
-                if (currentMode !== 'demand') currentData.sort((a, b) => b.ratio - a.ratio);
-
-                statusEl.innerText = `${currentData.length} resultados`;
-                statusEl.className = "text-sm font-bold text-green-600";
-                document.getElementById('col-metric').innerText = metricLabel;
-                renderTable();
-
-            } catch (err) {
-                console.error(err);
-                statusEl.innerText = "Error API";
-                statusEl.className = "text-sm font-bold text-red-600";
-                document.getElementById('table-body').innerHTML = `<tr><td colspan="7" class="text-center p-8 text-red-500">Error: ${err.message}</td></tr>`;
+            if (error) {
+                status.innerText = "Error API";
+                throw new Error(error.message);
             }
+
+            dataList = data || [];
+            // Demanda ya viene ordenada por SQL, los otros no
+            if (mode !== 'demand') {
+                dataList.sort((a,b) => b.ratio - a.ratio);
+            }
+
+            status.innerText = `${dataList.length} items`;
+            render();
         }
 
-        function renderTable() {
+        function setMode(m) {
+            mode = m;
+            // Estilos botones
+            ['arbitrage', 'trend', 'demand'].forEach(x => {
+                const b = document.getElementById('btn-'+x);
+                b.className = (x === m) 
+                    ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab'
+                    : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab';
+            });
+            
+            // Texto cabecera
+            const headers = { 'arbitrage': 'Gap', 'trend': 'Subida', 'demand': 'Demanda' };
+            document.getElementById('metric-header').innerText = headers[m];
+            document.getElementById('col-head-metric').innerText = headers[m];
+            
+            loadData();
+        }
+
+        function render() {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = '';
 
-            if (!currentData || currentData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400">No hay datos.</td></tr>`;
-                return;
-            }
+            dataList.forEach((item, i) => {
+                let val = '';
+                let color = '';
 
-            currentData.forEach((item, index) => {
-                let metricValue, metricClass;
-
-                if (currentMode === 'search') {
-                    metricValue = (item.ratio || 0).toFixed(2) + 'x';
-                    metricClass = item.ratio > 1.5 ? 'ratio-high' : 'bg-slate-100 text-slate-500 px-2 py-1 rounded';
-                } else if (currentMode === 'arbitrage') {
-                    metricValue = item.ratio.toFixed(2) + 'x';
-                    metricClass = item.ratio > 2.0 ? 'ratio-extreme' : 'ratio-high';
-                } else if (currentMode === 'trend') {
-                    metricValue = '+' + item.ratio.toFixed(1) + '%';
-                    metricClass = 'ratio-high';
-                } else if (currentMode === 'demand') {
-                    metricValue = `+${Math.round(item.ratio)}%`;
-                    metricClass = 'bg-amber-100 text-amber-800 border border-amber-200 font-bold px-2 py-1 rounded';
+                if (mode === 'arbitrage') {
+                    val = item.ratio.toFixed(2) + 'x';
+                    color = item.ratio > 2 ? 'bg-green-100 text-green-800' : 'bg-gray-100';
+                } else if (mode === 'trend') {
+                    val = '+' + item.ratio.toFixed(0) + '%';
+                    color = 'bg-blue-50 text-blue-700';
+                } else {
+                    val = '+' + Math.round(item.ratio) + '%';
+                    color = 'bg-amber-50 text-amber-700';
                 }
 
-                const currentRank = item.edhrec_rank > 0 ? `#${item.edhrec_rank}` : '—';
-                const cleanName = item.name.replace(/'/g, '');
-                const mkmLink = `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
-                const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
+                // Generar Link MKM simple
+                const link = `https://www.cardmarket.com/en/Magic/Cards/${item.name.replace(/ /g, '-').replace(/'/g, '')}`;
 
-                const row = `
-                    <tr class="card-row border-b border-slate-100">
-                        <td class="px-4 py-3 pl-6">
-                            <div class="flex items-center gap-3">
-                                <div onclick="showImageModal('${item.image_uri}', event)">
-                                    <img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover">
-                                </div>
-                                <div>
-                                    <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
-                                    ${currentMode === 'search' ? `<div class="text-[10px] text-slate-400 font-bold">${(item.set_code||'').toUpperCase()}</div>` : ''}
-                                </div>
-                            </div>
-                        </td>
-                        <td class="px-2 py-3 text-center">
-                             <span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase hidden md:inline-block">${item.set_code}</span>
-                        </td>
-                        <td class="px-4 py-3 text-right font-mono font-bold text-slate-700">${(item.eur||0).toFixed(2)}€</td>
-                        <td class="hide-mobile px-4 py-3 text-right font-mono text-slate-400">$${(item.usd||0).toFixed(2)}</td>
-                        <td class="px-4 py-3 text-center"><span class="${metricClass} text-sm">${metricValue}</span></td>
-                        <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">${currentRank}</td>
-                        <td class="px-4 py-3 text-center">
-                            <div class="flex gap-2 justify-center">
-                                <button onclick="showChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 bg-blue-50">📊</button>
-                                <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50">🛒</a>
-                            </div>
-                        </td>
-                    </tr>`;
-                tbody.insertAdjacentHTML('beforeend', row);
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-slate-50';
+                tr.innerHTML = `
+                    <td class="px-3 py-2">
+                        <div class="font-bold text-sm truncate max-w-[150px]">${item.name}</div>
+                        <div class="text-[10px] text-gray-400 uppercase">${item.set_code}</div>
+                    </td>
+                    <td class="px-2 py-2 text-right font-mono text-sm">${item.eur.toFixed(2)}€</td>
+                    <td class="px-2 py-2 text-center">
+                        <span class="${color} px-1.5 py-0.5 rounded text-xs font-bold">${val}</span>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                        <button onclick="openChart(${i})" class="text-lg">📊</button>
+                    </td>
+                `;
+                // Click en fila para ir a MKM
+                tr.onclick = (e) => { 
+                    if(e.target.tagName !== 'BUTTON') window.open(link, '_blank'); 
+                };
+                
+                tbody.appendChild(tr);
             });
         }
 
-        // --- SISTEMA DE PESTAÑAS ---
-        function switchMode(mode) {
-            currentMode = mode;
-            ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
-                const btn = document.getElementById(`tab-${m}`);
-                btn.className = (m === mode) 
-                    ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap'
-                    : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
-            });
-
-            const searchInput = document.getElementById('search-input');
-            const searchSuggestions = document.getElementById('suggestions-list');
-
-            if (mode === 'search') {
-                document.getElementById('table-body').innerHTML = '';
-                document.getElementById('status-text').innerText = 'Busca una carta...';
-                searchInput.focus();
-            } else {
-                if(searchSuggestions) searchSuggestions.classList.add('hidden');
-                loadData();
-            }
-        }
-
-        // --- BÚSQUEDA ---
-        function setupAutocomplete() {
+        // --- BUSCADOR ---
+        function initSearch() {
             const input = document.getElementById('search-input');
             const list = document.getElementById('suggestions-list');
-            
-            input.addEventListener('input', (e) => {
-                const term = e.target.value.trim();
-                clearTimeout(searchTimeout);
-                if (term.length < 3) { list.classList.add('hidden'); return; }
 
-                searchTimeout = setTimeout(async () => {
-                    const { data, error } = await supabase.rpc('search_cards', { keyword: term });
-                    if (error || !data || data.length === 0) { list.classList.add('hidden'); return; }
+            input.addEventListener('input', (e) => {
+                const txt = e.target.value;
+                clearTimeout(searchTimer);
+                if (txt.length < 3) { list.classList.add('hidden'); return; }
+
+                searchTimer = setTimeout(async () => {
+                    const { data } = await sb.rpc('search_cards', { keyword: txt });
+                    if (!data || !data.length) { list.classList.add('hidden'); return; }
+
+                    // Filtrar únicos
+                    const uniques = [...new Set(data.map(i => i.name))].slice(0, 10);
                     
-                    const uniqueNames = [...new Set(data.map(i => i.name))].slice(0, 8);
                     list.innerHTML = '';
-                    uniqueNames.forEach(name => {
+                    uniques.forEach(name => {
                         const li = document.createElement('li');
-                        li.className = 'px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer border-b border-slate-50';
-                        li.innerHTML = `🔍 ${name}`;
-                        li.onclick = () => {
-                            input.value = name;
-                            list.classList.add('hidden');
-                            executeSearch(name);
-                        };
+                        li.className = 'p-3 border-b text-sm font-bold bg-white hover:bg-gray-100 cursor-pointer';
+                        li.innerText = name;
+                        li.onclick = () => doSearch(name);
                         list.appendChild(li);
                     });
                     list.classList.remove('hidden');
-                }, 300);
-            });
-            
-            // Cerrar al clicar fuera
-            document.addEventListener('click', (e) => {
-                if (!input.contains(e.target) && !list.contains(e.target)) list.classList.add('hidden');
+                }, 400);
             });
         }
 
-        async function executeSearch(name) {
-            currentMode = 'search';
+        async function doSearch(name) {
+            document.getElementById('suggestions-list').classList.add('hidden');
+            document.getElementById('search-input').value = name;
             document.getElementById('status-text').innerText = "Buscando...";
-            const { data, error } = await supabase.rpc('search_cards', { keyword: name });
-            if (error) { alert(error.message); return; }
-            currentData = data;
-            document.getElementById('status-text').innerText = `${data.length} versiones`;
-            document.getElementById('col-metric').innerText = 'Gap';
-            renderTable();
+            
+            // Usamos la misma RPC de buscar pero mostrando todo
+            const { data } = await sb.rpc('search_cards', { keyword: name });
+            dataList = data || [];
+            
+            // Ajustamos modo visualmente
+            mode = 'search'; 
+            document.getElementById('metric-header').innerText = 'Gap';
+            document.getElementById('col-head-metric').innerText = 'Gap';
+            
+            // Desmarcar tabs
+            document.querySelectorAll('button[id^="btn-"]').forEach(b => b.className = b.className.replace('active-tab', 'inactive-tab'));
+            
+            document.getElementById('status-text').innerText = `${dataList.length} versiones`;
+            render();
         }
 
-        // --- GRÁFICAS Y UTILIDADES ---
-        async function showChart(index) {
-            const item = currentData[index];
-            const modal = document.getElementById('chart-modal');
-            modal.classList.remove('hidden');
+        // --- CHART ---
+        async function openChart(i) {
+            const item = dataList[i];
+            document.getElementById('modal-chart').classList.remove('hidden');
             
-            if (chartInstance) chartInstance.destroy();
-            
-            const { data } = await supabase.rpc('get_card_history', { target_card_name: item.name, target_set_code: item.set_code });
-            if (!data || data.length === 0) return;
+            if (chartObj) chartObj.destroy();
 
-            const ctx = document.getElementById('priceChart').getContext('2d');
-            chartInstance = new Chart(ctx, {
+            const { data } = await sb.rpc('get_card_history', { 
+                target_card_name: item.name, target_set_code: item.set_code 
+            });
+
+            if(!data) return;
+
+            const ctx = document.getElementById('chart-canvas').getContext('2d');
+            chartObj = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: data.map(d => new Date(d.date).toLocaleDateString(undefined, {day:'2-digit', month:'2-digit'})),
+                    labels: data.map(x => x.date.substring(5)), // mm-dd
                     datasets: [
-                        { label: 'USD', data: data.map(d => d.usd), borderColor: '#3b82f6', tension: 0.4 },
-                        { label: 'EUR', data: data.map(d => d.eur), borderColor: '#22c55e', tension: 0.4 }
+                        { label: 'USD', data: data.map(x => x.usd), borderColor: 'blue' },
+                        { label: 'EUR', data: data.map(x => x.eur), borderColor: 'green' }
                     ]
- 
+                },
+                options: { maintainAspectRatio: false }
+            });
+        }
+    </script>
+</body>
+</html>

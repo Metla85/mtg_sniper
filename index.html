@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V17</title>
+    <title>MTG Sniper V18</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -14,22 +14,19 @@
     <style>
         body { -webkit-tap-highlight-color: transparent; }
         
-        /* ESTILOS DE TABLA Y UI */
+        /* ESTILOS GENERALES */
+        .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
+        .inactive-tab { color: #64748b; }
         .ratio-badge { font-family: monospace; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
         .ratio-extreme { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
         .ratio-high { background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
-        
-        .active-tab { border-bottom: 3px solid #4f46e5; color: #4f46e5; background: #eef2ff; }
-        .inactive-tab { color: #64748b; }
-        
-        /* Colores de variación */
         .rank-up { color: #10b981; font-weight: bold; } 
         .rank-down { color: #ef4444; font-weight: bold; }
         
-        /* Estilos Búsqueda */
-        #suggestions-list { max-height: 250px; overflow-y: auto; z-index: 50; }
+        /* Estilos Búsqueda y Fichas */
+        #suggestions-list { max-height: 250px; overflow-y: auto; z-index: 60; }
         .card-sheet { transition: transform 0.2s; }
-        .card-sheet:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .card-sheet:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
 
         .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
         .icon-btn:hover { background-color: #e2e8f0; }
@@ -48,11 +45,13 @@
         </div>
     </div>
 
-    <div id="main-screen" class="hidden max-w-6xl mx-auto pb-20">
+    <div id="main-screen" class="hidden max-w-6xl mx-auto pb-24">
         
-        <div class="mb-4 pt-2 flex justify-between items-center px-2">
-            <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
-            <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
+        <div class="mb-4 pt-2 flex flex-col gap-3">
+            <div class="flex justify-between items-center px-2">
+                <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
+                <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
+            </div>
         </div>
 
         <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
@@ -64,7 +63,7 @@
 
         <div id="status-bar" class="flex justify-between items-center mb-4 px-1">
             <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
-            <button onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar</button>
+            <button id="copy-btn" onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar</button>
         </div>
 
         <div id="view-table" class="bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
@@ -78,7 +77,8 @@
                             <th class="hide-mobile px-4 py-3 text-right">USD</th>
                             <th class="px-4 py-3 text-center" id="col-metric">Gap</th>
                             <th class="px-4 py-3 text-center">Rank</th>
-                            <th class="px-4 py-3 text-center">Var.</th> <th class="px-4 py-3 text-center">Acc</th>
+                            <th class="px-4 py-3 text-center">Var.</th>
+                            <th class="px-4 py-3 text-center">Acc</th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -86,10 +86,10 @@
             </div>
         </div>
 
-        <div id="view-search" class="hidden flex flex-col gap-4">
+        <div id="view-search" class="hidden flex flex-col gap-4 px-1">
             
             <div class="relative z-50">
-                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-lg font-bold" placeholder="Escribe el nombre de la carta..." autocomplete="off">
+                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-lg font-bold" placeholder="Escribe carta..." autocomplete="off">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
                 <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 divide-y divide-slate-100"></ul>
             </div>
@@ -97,9 +97,10 @@
             <div id="search-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 </div>
             
-            <p id="search-placeholder" class="text-center text-slate-400 py-10">Usa la barra superior para buscar cartas.</p>
+            <p id="search-placeholder" class="text-center text-slate-400 py-10">Usa el buscador superior.</p>
         </div>
 
+        <p class="text-center text-xs text-slate-400 mt-4 pb-8">💡 Pulsa en la foto para ampliar.</p>
     </div>
 
     <div id="chart-modal" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" onclick="document.getElementById('chart-modal').classList.add('hidden')">
@@ -108,6 +109,7 @@
             <div class="h-64 md:h-80"><canvas id="priceChart"></canvas></div>
         </div>
     </div>
+
     <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-[150] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
         <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg">
     </div>
@@ -119,7 +121,7 @@
         let searchTimer = null;
         let chartInstance = null;
 
-        // ARRANQUE SEGURO
+        // INICIO
         window.onload = function() {
             const url = localStorage.getItem('supabase_url');
             const key = localStorage.getItem('supabase_key');
@@ -131,20 +133,19 @@
                 document.getElementById('main-screen').classList.remove('hidden');
                 try {
                     supabase = window.supabase.createClient(url, key);
-                    initAutocomplete(); // Iniciamos el listener del buscador
+                    initAutocomplete(); 
                     loadData();
                 } catch (e) {
-                    alert("Error inicializando.");
+                    alert("Error inicializando. Reset.");
                     resetConfig();
                 }
             }
         };
 
-        // --- CARGA DE DATOS (TABLA) ---
+        // CARGA DE DATOS (Modos Tabla)
         async function loadData() {
             if (currentMode === 'search') return;
 
-            // Mostrar Tabla / Ocultar Búsqueda
             document.getElementById('view-table').classList.remove('hidden');
             document.getElementById('view-search').classList.add('hidden');
             document.getElementById('status-bar').classList.remove('hidden');
@@ -180,20 +181,8 @@
                 else { val = '+'+Math.round(item.ratio)+'%'; color = 'bg-amber-100 text-amber-800 border border-amber-200'; }
                 
                 const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
-                
-                // --- LÓGICA DE VARIACIÓN (RANK CHANGE) ---
-                // Aquí calculamos la flecha y el color
                 const rankChange = item.rank_change || 0;
-                let rankArrow = '—';
-                let rankClass = 'text-slate-300';
-
-                if (rankChange > 0) {
-                    rankArrow = `▲ ${rankChange}`;
-                    rankClass = 'rank-up';
-                } else if (rankChange < 0) {
-                    rankArrow = `▼ ${Math.abs(rankChange)}`;
-                    rankClass = 'rank-down';
-                }
+                let arrow = rankChange > 0 ? `<span class="rank-up">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-slate-300">—</span>');
 
                 const row = `
                     <tr class="card-row border-b border-slate-100 hover:bg-slate-50 transition-colors">
@@ -210,7 +199,7 @@
                         <td class="hide-mobile px-4 py-3 text-right font-mono text-slate-400">$${(item.usd||0).toFixed(2)}</td>
                         <td class="px-4 py-3 text-center"><span class="${color} ratio-badge">${val}</span></td>
                         <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">${rankInfo}</td>
-                        <td class="px-4 py-3 text-center text-xs ${rankClass}">${rankArrow}</td>
+                        <td class="px-4 py-3 text-center text-xs font-bold">${arrow}</td>
                         <td class="px-4 py-3 text-center">
                             <div class="flex justify-center gap-2">
                                 <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50">📊</button>
@@ -223,7 +212,7 @@
             });
         }
 
-        // --- SISTEMA DE BÚSQUEDA ---
+        // --- SISTEMA DE BÚSQUEDA (MODO FICHAS) ---
         function initAutocomplete() {
             const input = document.getElementById('search-input');
             const list = document.getElementById('suggestions-list');
@@ -252,7 +241,6 @@
                 }, 300);
             });
             
-            // Cerrar lista al clicar fuera
             document.addEventListener('click', (e) => {
                 if(!input.contains(e.target) && !list.contains(e.target)) list.classList.add('hidden');
             });
@@ -267,31 +255,32 @@
             grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Buscando...</div>';
 
             const { data } = await supabase.rpc('search_cards', { keyword: name });
-            currentData = data || []; // Actualizamos global para que las gráficas funcionen
+            currentData = data || []; // Actualizamos currentData para que openChart funcione
             grid.innerHTML = '';
 
             if (currentData.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">No se encontraron cartas.</div>';
+                grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">No encontrado.</div>';
                 return;
             }
 
-            // RENDERIZADO DE FICHAS (CARDS)
             currentData.forEach((item, i) => {
                 const card = document.createElement('div');
                 card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
                 
-                const gapHtml = item.ratio > 1.5 
-                    ? `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-1 rounded border border-green-200">Gap: ${item.ratio}x</span>` 
-                    : '';
+                const gapHtml = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded border border-green-200">Gap: ${item.ratio}x</span>` : '';
+                
+                // Variación de Rank para la ficha
+                const rankChange = item.rank_change || 0;
+                let arrow = rankChange > 0 ? `<span class="rank-up text-sm">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down text-sm">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-gray-300">—</span>');
 
                 card.innerHTML = `
                     <div class="flex p-4 gap-4 items-start">
-                        <div class="w-1/3 min-w-[100px] cursor-pointer" onclick="showImage('${item.image_uri}', event)">
+                        <div class="w-1/3 min-w-[90px] cursor-pointer" onclick="showImage('${item.image_uri}', event)">
                             <img src="${item.image_uri}" class="w-full rounded-lg shadow-sm hover:opacity-90">
                         </div>
                         <div class="w-2/3 flex flex-col gap-1">
                             <div>
-                                <h3 class="font-black text-lg leading-tight text-slate-800">${item.name}</h3>
+                                <div class="font-black text-lg leading-tight text-slate-800">${item.name}</div>
                                 <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">${item.set_code}</div>
                             </div>
                             
@@ -306,15 +295,22 @@
                                 </div>
                             </div>
                             
-                            <div class="flex justify-between items-center mt-auto">
-                                <div class="text-xs font-mono text-slate-500">Rank: #${item.edhrec_rank||'?'}</div>
-                                ${gapHtml}
+                            <div class="flex justify-between items-center mt-auto border-t border-dashed border-slate-200 pt-2">
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-400 uppercase font-bold">Rank</span>
+                                    <span class="text-xs font-mono font-bold text-slate-600">#${item.edhrec_rank||'?'}</span>
+                                </div>
+                                <div class="flex flex-col text-right">
+                                    <span class="text-[10px] text-gray-400 uppercase font-bold">Var. 24h</span>
+                                    ${arrow}
+                                </div>
                             </div>
+                            <div class="mt-2 text-right">${gapHtml}</div>
                         </div>
                     </div>
                     <div class="bg-slate-50 p-3 border-t flex justify-between items-center">
                         <button onclick="openChart(${i})" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                            📊 Historial
+                            📊 Ver Historial
                         </button>
                         <a href="${item.mkm_link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition">
                             Comprar
@@ -325,41 +321,45 @@
             });
         }
 
-        // --- GESTIÓN DE VISTAS ---
+        // --- UTILIDADES ---
         function switchMode(mode) {
             currentMode = mode;
             ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
                 const btn = document.getElementById('tab-'+m);
                 btn.className = (m === mode) 
-                    ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' 
-                    : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
+                    ? 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase active-tab whitespace-nowrap' 
+                    : 'flex-1 py-3 px-2 font-bold text-xs md:text-sm uppercase inactive-tab whitespace-nowrap';
             });
 
             if (mode === 'search') {
                 document.getElementById('view-table').classList.add('hidden');
                 document.getElementById('view-search').classList.remove('hidden');
-                document.getElementById('status-bar').classList.add('hidden'); // Ocultar barra de status en búsqueda
+                document.getElementById('status-bar').classList.add('hidden');
                 document.getElementById('search-input').focus();
             } else {
                 document.getElementById('view-table').classList.remove('hidden');
                 document.getElementById('view-search').classList.add('hidden');
                 document.getElementById('status-bar').classList.remove('hidden');
                 document.getElementById('search-input').value = '';
-                document.getElementById('search-results-grid').innerHTML = '';
-                document.getElementById('search-placeholder').classList.remove('hidden');
                 loadData();
             }
         }
 
-        // --- GRÁFICAS Y UTILIDADES ---
         async function openChart(i) {
             const item = currentData[i];
             document.getElementById('modal-chart').classList.remove('hidden');
             document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
+            
             if (chartInstance) chartInstance.destroy();
 
             const { data } = await supabase.rpc('get_card_history', { target_card_name: item.name, target_set_code: item.set_code });
-            if (!data) return;
+            
+            // Si falla o está vacío, manejamos el error
+            if (!data || data.length === 0) {
+                alert("No hay historial disponible para esta carta.");
+                document.getElementById('modal-chart').classList.add('hidden');
+                return;
+            }
 
             const ctx = document.getElementById('priceChart').getContext('2d');
             chartInstance = new Chart(ctx, {

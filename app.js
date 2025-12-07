@@ -7,66 +7,71 @@ let sortAsc = false;
 let searchTimer = null;
 let chartInstance = null;
 
-// --- 1. INICIALIZACIÓN BLINDADA ---
+// --- HELPERS SEGUROS PARA UI (Evita el crash "cannot set properties of null") ---
+function uiSetText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = text;
+    else console.warn(`UI Warning: Elemento '${id}' no encontrado.`);
+}
+
+function uiSetHTML(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+    else console.warn(`UI Warning: Elemento '${id}' no encontrado.`);
+}
+
+function uiShow(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+}
+
+function uiHide(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+}
+
+// --- 1. INICIALIZACIÓN ---
 window.onload = function() {
-    // A. Comprobar si la librería cargó
     if (typeof window.supabase === 'undefined') {
-        alert("Error: La librería de Supabase no se ha cargado. Revisa tu conexión a internet o bloqueadores de anuncios.");
-        return;
+        alert("Error de red: Librería Supabase no cargada."); return;
     }
 
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
 
-    // B. Si no hay claves, mostrar login
     if (!url || !key) {
-        showLogin();
+        uiShow('config-screen');
+        uiHide('main-screen');
         return;
     }
 
-    // C. Intentar conectar (Sin borrar datos si falla)
     try {
-        // Validación básica de formato URL
-        if (!url.startsWith('http')) {
-            throw new Error("La URL de Supabase parece incorrecta (debe empezar por https://)");
-        }
-
         supabase = window.supabase.createClient(url, key);
+        uiHide('config-screen');
+        uiShow('main-screen');
         
-        // Si llegamos aquí, el cliente se creó. Ocultamos login.
-        document.getElementById('config-screen').classList.add('hidden');
-        document.getElementById('main-screen').classList.remove('hidden');
-        
-        // Iniciamos la app
         initAutocomplete(); 
         loadData(); 
 
     } catch (e) {
-        console.error("Error al iniciar:", e);
-        alert("Error de Configuración: " + e.message + "\n\nPor favor, revisa tus credenciales manualmente.");
-        // NO llamamos a resetConfig() automáticamente.
+        console.error(e);
+        alert("Error iniciando app: " + e.message);
     }
 };
 
-function showLogin() {
-    document.getElementById('config-screen').classList.remove('hidden');
-    document.getElementById('main-screen').classList.add('hidden');
-}
-
-// --- 2. CARGA DE DATOS SEGURA ---
+// --- 2. CARGA DE DATOS ---
 async function loadData() {
     if (currentMode === 'search') return;
 
-    // UI Updates
-    document.getElementById('view-table').classList.remove('hidden');
-    document.getElementById('view-search').classList.add('hidden');
-    document.getElementById('toolbar').classList.remove('hidden');
-    document.getElementById('status-text').innerText = "Conectando...";
-    document.getElementById('table-body').innerHTML = ''; 
+    // Reset Visual
+    uiShow('view-table');
+    uiHide('view-search');
+    uiShow('toolbar');
+    uiSetText('status-text', "Cargando...");
+    uiSetHTML('table-body', '');
 
     let rpcName, metricLabel;
     
-    // Configuración
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
@@ -76,82 +81,55 @@ async function loadData() {
     }
 
     try {
-        console.log(`📡 Llamando a RPC: ${rpcName}`);
-        
         const { data, error } = await supabase.rpc(rpcName);
         
-        // --- MANEJO DE ERRORES ESPECÍFICOS ---
-        if (error) {
-            console.error("Supabase RPC Error:", error);
-            
-            // Error de autenticación (Claves mal)
-            if (error.code === 'PGRST301' || error.message.includes('JWT')) {
-                alert("Error de Autenticación: Tus claves son incorrectas o han caducado.\n\nEl sistema se reiniciará.");
-                resetConfig(); // AQUÍ SÍ reseteamos porque las claves están mal seguro.
-                return;
-            }
-            
-            // Error de Base de Datos (Función no existe, etc)
-            if (error.code === '42883') {
-                alert("Error SQL: La función no existe en la base de datos. ¿Has ejecutado el script SQL de la V22?");
-                return;
-            }
-
-            throw error; // Otros errores
-        }
+        if (error) { throw error; }
         
-        // --- PROCESAMIENTO DE DATOS ---
         if (!data || data.length === 0) {
-            document.getElementById('status-text').innerText = "0 resultados";
-            document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Consulta exitosa, pero no hay datos hoy.</td></tr>`;
+            uiSetText('status-text', "0 resultados");
+            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`);
             masterData = [];
             return;
         }
 
-        // Éxito
-        console.log("✅ Datos recibidos:", data.length);
+        // ÉXITO
         masterData = data;
-        document.getElementById('col-metric').innerText = metricLabel;
+        uiSetText('col-metric', metricLabel);
 
-        // Renderizado inicial robusto
+        // Renderizado inicial
         currentData = [...masterData];
         doSort(); 
         
-        // Aplicar filtro si ya existía
+        // Aplicar filtro si existe
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) {
             applyFilters();
         } else {
-            document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+            uiSetText('status-text', `${currentData.length} resultados`);
             renderTable();
         }
 
     } catch (err) {
-        console.error("Error General:", err);
-        alert("Error de Conexión: " + err.message);
-        document.getElementById('status-text').innerText = "Error";
+        console.error("Error loadData:", err);
+        alert("Error cargando datos: " + err.message);
+        uiSetText('status-text', "Error");
     }
 }
 
-// --- 3. FILTROS Y ORDENACIÓN ---
+// --- 3. FILTROS ---
 function applyFilters() {
-    try {
-        const input = document.getElementById('filter-min-eur');
-        let minEur = (input && input.value) ? parseFloat(input.value) : 0;
-        if (isNaN(minEur)) minEur = 0;
+    const input = document.getElementById('filter-min-eur');
+    let minEur = (input && input.value) ? parseFloat(input.value) : 0;
+    if (isNaN(minEur)) minEur = 0;
 
-        currentData = masterData.filter(item => {
-            // Protección contra nulos en el precio
-            const price = (item.eur !== null && item.eur !== undefined) ? parseFloat(item.eur) : 0;
-            return price >= minEur;
-        });
+    currentData = masterData.filter(item => {
+        const price = (item.eur !== null && item.eur !== undefined) ? parseFloat(item.eur) : 0;
+        return price >= minEur;
+    });
 
-        doSort();
-        document.getElementById('status-text').innerText = `${currentData.length} resultados`;
-        renderTable();
-    } catch (e) {
-        console.error("Error filtrando:", e);
-    }
+    doSort();
+    uiSetText('status-text', `${currentData.length} resultados`);
+    renderTable();
 }
 
 function sortBy(column) {
@@ -168,7 +146,6 @@ function doSort() {
     currentData.sort((a, b) => {
         let valA = a[sortCol];
         let valB = b[sortCol];
-
         if (valA == null) valA = 0;
         if (valB == null) valB = 0;
 
@@ -179,13 +156,15 @@ function doSort() {
     });
 }
 
-// --- 4. RENDERIZADO ---
+// --- 4. RENDER ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
+    if (!tbody) return; // Seguridad extra
+    
     tbody.innerHTML = '';
     
     if (!currentData || currentData.length === 0) { 
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado. Baja el filtro de precio.</td></tr>`; 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado.</td></tr>`; 
         return; 
     }
 
@@ -260,12 +239,11 @@ function getLinks(item) {
 // --- 5. GRÁFICAS ---
 async function openChart(i) {
     const item = currentData[i];
-    const modal = document.getElementById('chart-modal');
-    
-    if (!item) { alert("Error: Elemento no encontrado."); return; }
+    if (!item) { alert("Ítem no encontrado"); return; }
 
-    modal.classList.remove('hidden');
-    document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
+    const modal = document.getElementById('chart-modal');
+    uiShow('chart-modal');
+    uiSetText('modal-title', `${item.name} (${item.set_code})`);
     
     if (chartInstance) chartInstance.destroy();
 
@@ -275,16 +253,9 @@ async function openChart(i) {
             target_set_code: item.set_code 
         });
 
-        if (error) { 
-            console.error(error); 
-            alert("Error SQL: " + error.message); 
-            modal.classList.add('hidden');
-            return; 
-        }
-
-        if (!data || data.length === 0) {
-            alert("No hay historial disponible.");
-            modal.classList.add('hidden');
+        if (error || !data || data.length === 0) {
+            uiHide('chart-modal');
+            alert("Sin historial.");
             return;
         }
 
@@ -311,8 +282,8 @@ async function openChart(i) {
         });
 
     } catch (err) {
-        alert("Error JS en gráfica: " + err.message);
-        modal.classList.add('hidden');
+        uiHide('chart-modal');
+        alert("Error gráfica: " + err.message);
     }
 }
 
@@ -325,14 +296,14 @@ function switchMode(mode) {
     });
 
     if (mode === 'search') {
-        document.getElementById('view-table').classList.add('hidden');
-        document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('toolbar').classList.add('hidden');
+        uiHide('view-table');
+        uiShow('view-search');
+        uiHide('toolbar');
         document.getElementById('search-input').focus();
     } else {
-        document.getElementById('view-table').classList.remove('hidden');
-        document.getElementById('view-search').classList.add('hidden');
-        document.getElementById('toolbar').classList.remove('hidden');
+        uiShow('view-table');
+        uiHide('view-search');
+        uiShow('toolbar');
         document.getElementById('search-input').value = '';
         loadData();
     }
@@ -353,7 +324,6 @@ function initAutocomplete() {
 
             const uniques = [...new Set(data.map(i => i.name))].slice(0, 8);
             list.innerHTML = '';
-            
             uniques.forEach(name => {
                 const li = document.createElement('li');
                 li.className = 'px-4 py-3 text-sm font-medium hover:bg-indigo-50 cursor-pointer border-b border-slate-50 flex items-center gap-2';
@@ -371,9 +341,10 @@ function initAutocomplete() {
 }
 
 async function performSearch(name) {
-    document.getElementById('suggestions-list').classList.add('hidden');
+    uiHide('suggestions-list');
     document.getElementById('search-input').value = name;
-    document.getElementById('search-placeholder').classList.add('hidden');
+    uiHide('search-placeholder');
+    uiHide('copy-btn');
     
     const grid = document.getElementById('search-results-grid');
     grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Buscando...</div>';
@@ -387,7 +358,7 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+    uiSetText('status-text', `${currentData.length} resultados`);
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
@@ -455,7 +426,7 @@ async function performSearch(name) {
 function showImage(url, e) {
     e.stopPropagation();
     document.getElementById('enlarged-image').src = url;
-    document.getElementById('image-modal').classList.remove('hidden');
+    uiShow('image-modal');
 }
 
 function saveConfig() {
@@ -467,4 +438,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-    }
+}

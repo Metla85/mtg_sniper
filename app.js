@@ -54,7 +54,6 @@ async function loadData() {
 // --- HELPER LINKS ---
 function getLinks(item) {
     const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
-    // Priorizamos el link de la BD, si no, generamos uno
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
     const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
     const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
@@ -169,7 +168,7 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+    document.getElementById('status-text').innerText = `${currentData.length} versiones`;
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
@@ -236,52 +235,99 @@ async function performSearch(name) {
     });
 }
 
-// --- GRÁFICAS ---
+// --- GRÁFICAS (Escalas Separadas) ---
 async function openChart(i) {
     const item = currentData[i];
-    
-    if (!item) { alert("Error: Ítem no encontrado"); return; }
-
     const modal = document.getElementById('chart-modal');
+    
+    if (!item) return alert("Error: Elemento no encontrado.");
+
     modal.classList.remove('hidden');
-    document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
+    document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
     
     if (chartInstance) chartInstance.destroy();
 
-    const { data, error } = await supabase.rpc('get_card_history', { 
-        target_card_name: item.name, 
-        target_set_code: item.set_code 
-    });
+    try {
+        const { data, error } = await supabase.rpc('get_card_history', { 
+            target_card_name: item.name, 
+            target_set_code: item.set_code 
+        });
 
-    if (error) {
-        alert("Error de BD: " + error.message);
-        modal.classList.add('hidden');
-        return;
-    }
-    
-    if (!data || data.length === 0) {
-        alert("Sin historial.");
-        modal.classList.add('hidden');
-        return;
-    }
-
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
-            datasets: [
-                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3, pointRadius: 2 },
-                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 }
-            ]
-        },
-        options: { 
-            maintainAspectRatio: false, 
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            scales: { y: { beginAtZero: false } }
+        if (error) {
+            alert("Error SQL: " + error.message);
+            modal.classList.add('hidden');
+            return;
         }
-    });
+
+        if (!data || data.length === 0) {
+            alert("No hay historial disponible.");
+            modal.classList.add('hidden');
+            return;
+        }
+
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
+                datasets: [
+                    { 
+                        label: 'USD', 
+                        data: data.map(x => x.usd), 
+                        borderColor: '#3b82f6', 
+                        backgroundColor: '#3b82f6',
+                        tension: 0.2, 
+                        pointRadius: 2,
+                        yAxisID: 'y_price' // Eje Derecho
+                    },
+                    { 
+                        label: 'EUR', 
+                        data: data.map(x => x.eur), 
+                        borderColor: '#22c55e', 
+                        backgroundColor: '#22c55e',
+                        tension: 0.2, 
+                        pointRadius: 2,
+                        yAxisID: 'y_price' // Eje Derecho
+                    },
+                    { 
+                        label: 'Rank', 
+                        data: data.map(x => x.edhrec_rank), 
+                        borderColor: '#a855f7', 
+                        backgroundColor: '#a855f7',
+                        borderDash: [5,5], 
+                        hidden: false,
+                        pointRadius: 0,
+                        borderWidth: 1,
+                        yAxisID: 'y_rank' // Eje Izquierdo
+                    }
+                ]
+            },
+            options: { 
+                maintainAspectRatio: false,
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: { 
+                    y_price: { 
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: false, 
+                        title: {display: true, text: 'Precio'}
+                    },
+                    y_rank: {
+                        type: 'linear',
+                        position: 'left',
+                        reverse: true, // Invertir para que Rank 1 esté arriba
+                        grid: { drawOnChartArea: false },
+                        title: {display: true, text: 'Rank #'}
+                    }
+                }
+            }
+        });
+
+    } catch (err) {
+        alert("Error JS: " + err.message);
+        modal.classList.add('hidden');
+    }
 }
 
 // --- UTILIDADES ---

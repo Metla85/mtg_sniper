@@ -1,9 +1,9 @@
 let supabase = null;
 let currentMode = 'arbitrage';
-let masterData = []; // Datos originales de la API
-let currentData = []; // Datos filtrados y ordenados (lo que se ve)
-let sortCol = 'ratio'; // Columna por defecto
-let sortAsc = false;   // Dirección por defecto
+let masterData = []; // Datos crudos
+let currentData = []; // Datos visibles
+let sortCol = 'ratio';
+let sortAsc = false;
 let searchTimer = null;
 let chartInstance = null;
 
@@ -22,7 +22,7 @@ window.onload = function() {
             initAutocomplete(); 
             loadData();
         } catch (e) {
-            alert("Error inicializando. Reset.");
+            alert("Error inicializando Supabase. Revisa configuración.");
             resetConfig();
         }
     }
@@ -32,14 +32,16 @@ window.onload = function() {
 async function loadData() {
     if (currentMode === 'search') return;
 
-    // Resetear UI
+    // UI Reset
     document.getElementById('view-table').classList.remove('hidden');
     document.getElementById('view-search').classList.add('hidden');
     document.getElementById('toolbar').classList.remove('hidden');
     document.getElementById('status-text').innerText = "Cargando...";
+    document.getElementById('table-body').innerHTML = ''; // Limpiar tabla antes de cargar
 
     let rpcName, metricLabel;
-    // Configuración por defecto según pestaña
+    
+    // Configuración según modo
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; 
         metricLabel = 'Gap'; 
@@ -54,61 +56,81 @@ async function loadData() {
         sortCol = 'ratio'; sortAsc = false;
     }
 
+    console.log(`📡 Solicitando datos a RPC: ${rpcName}...`);
+
     const { data, error } = await supabase.rpc(rpcName);
-    if (error) { alert("Error API: " + error.message); return; }
     
-    // GUARDAMOS EN MASTERDATA (La fuente de verdad)
-    masterData = data || [];
+    if (error) { 
+        alert("Error de Base de Datos: " + error.message); 
+        document.getElementById('status-text').innerText = "Error API";
+        return; 
+    }
     
+    // DEBUG: Comprobación de datos
+    if (!data || data.length === 0) {
+        document.getElementById('status-text').innerText = "0 resultados";
+        document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">La consulta no devolvió datos. (Revisa si hay datos de hoy en BD)</td></tr>`;
+        masterData = [];
+        return;
+    }
+
+    // DEBUG: Ver datos en consola (F12)
+    console.log("✅ Datos recibidos:", data.length, "Filas. Ejemplo:", data[0]);
+
+    // Guardamos y renderizamos
+    masterData = data;
     document.getElementById('col-metric').innerText = metricLabel;
     
-    // Aplicamos filtros y ordenación iniciales
     applyFilters();
 }
 
-// --- LÓGICA DE FILTRADO Y ORDENACIÓN (NUEVO) ---
-
+// --- FILTROS Y ORDENACIÓN ---
 function applyFilters() {
-    // 1. Leer valores de los inputs
-    const minEur = parseFloat(document.getElementById('filter-min-eur').value) || 0;
+    try {
+        const inputVal = document.getElementById('filter-min-eur').value;
+        const minEur = inputVal ? parseFloat(inputVal) : 0;
 
-    // 2. Filtrar masterData -> currentData
-    currentData = masterData.filter(item => {
-        if (item.eur < minEur) return false;
-        return true;
-    });
+        // Filtramos sobre una copia segura
+        currentData = masterData.filter(item => {
+            // Protección: si eur es null, asumimos 0
+            const price = item.eur != null ? Number(item.eur) : 0;
+            return price >= minEur;
+        });
 
-    // 3. Ordenar currentData
-    doSort();
+        doSort();
+        
+        document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+        renderTable();
 
-    // 4. Renderizar
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
-    renderTable();
+    } catch (e) {
+        console.error("Error en applyFilters:", e);
+        alert("Error filtrando datos: " + e.message);
+    }
 }
 
 function sortBy(column) {
-    // Si pulsamos la misma columna, invertimos el orden
     if (sortCol === column) {
         sortAsc = !sortAsc;
     } else {
         sortCol = column;
-        sortAsc = false; // Por defecto descendente (mayor a menor)
+        sortAsc = false;
     }
-    
-    applyFilters(); // Esto llama a doSort y renderTable
+    applyFilters(); // Re-aplicar orden
 }
 
 function doSort() {
     currentData.sort((a, b) => {
+        // Protección contra valores nulos/undefined
         let valA = a[sortCol];
         let valB = b[sortCol];
 
-        // Manejo de nulos
-        if (valA == null) valA = 0;
-        if (valB == null) valB = 0;
+        if (valA === null || valA === undefined) valA = 0;
+        if (valB === null || valB === undefined) valB = 0;
 
-        // Comparación numérica o texto
-        if (typeof valA === 'string') {
+        // Detección automática de tipo (Texto o Número)
+        const isString = typeof valA === 'string';
+
+        if (isString) {
             return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
         } else {
             return sortAsc ? valA - valB : valB - valA;
@@ -116,33 +138,41 @@ function doSort() {
     });
 }
 
-// --- RENDER TABLA ---
+// --- RENDERIZADO ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     tbody.innerHTML = '';
     
     if (currentData.length === 0) { 
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos (revisa los filtros).</td></tr>`; 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos tras filtrar.</td></tr>`; 
         return; 
     }
 
     currentData.forEach((item, index) => {
         let val, color;
-        // Lógica visual específica por modo
+        const ratio = parseFloat(item.ratio || 0);
+
         if (currentMode === 'arbitrage') { 
-            val = item.ratio.toFixed(2)+'x'; 
-            color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
+            val = ratio.toFixed(2)+'x'; 
+            color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
         } else if (currentMode === 'trend') { 
-            val = '+'+item.ratio.toFixed(0)+'%'; 
+            val = '+'+ratio.toFixed(0)+'%'; 
             color = 'ratio-high'; 
         } else { 
-            val = '+'+Math.round(item.ratio)+'%'; 
+            val = '+'+Math.round(ratio)+'%'; 
             color = 'bg-amber-100 text-amber-800 border border-amber-200'; 
         }
         
         const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
-        const rankChange = item.rank_change || 0;
-        let arrow = rankChange > 0 ? `<span class="rank-up">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-slate-300">—</span>');
+        
+        // Flecha de variación
+        // NOTA: Si la BD no devuelve rank_change, usamos 0 para evitar errores
+        const change = item.rank_change || 0;
+        let arrow = '—';
+        let arrowClass = 'text-slate-300';
+        
+        if (change > 0) { arrow = `▲ ${change}`; arrowClass = 'rank-up'; }
+        else if (change < 0) { arrow = `▼ ${Math.abs(change)}`; arrowClass = 'rank-down'; }
 
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
@@ -151,17 +181,17 @@ function renderTable() {
                 <td class="px-4 py-3 pl-6">
                     <div class="flex items-center gap-3">
                         <div class="cursor-pointer" onclick="showImage('${item.image_uri}', event)">
-                            <img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover shadow-sm">
+                            <img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover shadow-sm" onerror="this.src='https://cards.scryfall.io/large/front/4/4/44012bb8-17b7-4b50-a796-662ef09bfc29.jpg'">
                         </div>
                         <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
                     </div>
                 </td>
-                <td class="px-2 py-3 text-center"><span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">${item.set_code}</span></td>
+                <td class="px-2 py-3 text-center"><span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">${item.set_code || '??'}</span></td>
                 <td class="px-4 py-3 text-right font-mono font-bold text-slate-700">${(item.eur||0).toFixed(2)}€</td>
                 <td class="hide-mobile px-4 py-3 text-right font-mono text-slate-400">$${(item.usd||0).toFixed(2)}</td>
                 <td class="px-4 py-3 text-center"><span class="${color} ratio-badge">${val}</span></td>
                 <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">${rankInfo}</td>
-                <td class="px-4 py-3 text-center text-xs font-bold">${arrow}</td>
+                <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="icon-group flex justify-center gap-1">
                         <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
@@ -185,19 +215,20 @@ function renderTable() {
 }
 
 function getLinks(item) {
-    const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
+    const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
-    const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
+    const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name || '')}`;
     const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
     return { mkmLink, ckLink, edhLink };
 }
 
 // --- GRÁFICAS ---
 async function openChart(i) {
+    // Usamos currentData para asegurarnos de que el índice coincide con lo que ve el usuario
     const item = currentData[i];
     const modal = document.getElementById('chart-modal');
     
-    if (!item) return alert("Error: Elemento no encontrado.");
+    if (!item) { alert("Error: No se puede cargar la gráfica."); return; }
 
     modal.classList.remove('hidden');
     document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
@@ -205,13 +236,21 @@ async function openChart(i) {
     if (chartInstance) chartInstance.destroy();
 
     try {
+        // IMPORTANTE: Usa get_card_history que ya tienes en SQL
         const { data, error } = await supabase.rpc('get_card_history', { 
             target_card_name: item.name, 
             target_set_code: item.set_code 
         });
 
-        if (error || !data || data.length === 0) {
-            alert("Sin historial.");
+        if (error) { 
+            console.error(error); 
+            alert("Error SQL en gráfica: " + error.message); 
+            modal.classList.add('hidden');
+            return; 
+        }
+
+        if (!data || data.length === 0) {
+            alert("No hay historial disponible.");
             modal.classList.add('hidden');
             return;
         }
@@ -239,7 +278,7 @@ async function openChart(i) {
         });
 
     } catch (err) {
-        alert("Error JS: " + err.message);
+        alert("Error JS en gráfica: " + err.message);
         modal.classList.add('hidden');
     }
 }
@@ -255,7 +294,7 @@ function switchMode(mode) {
     if (mode === 'search') {
         document.getElementById('view-table').classList.add('hidden');
         document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('toolbar').classList.add('hidden'); // Ocultar filtros en búsqueda
+        document.getElementById('toolbar').classList.add('hidden'); 
         document.getElementById('search-input').focus();
     } else {
         document.getElementById('view-table').classList.remove('hidden');
@@ -266,7 +305,6 @@ function switchMode(mode) {
     }
 }
 
-// --- BÚSQUEDA Y OTROS HELPERS ---
 function initAutocomplete() {
     const input = document.getElementById('search-input');
     const list = document.getElementById('suggestions-list');

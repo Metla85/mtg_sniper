@@ -1,13 +1,13 @@
 let supabase = null;
 let currentMode = 'arbitrage';
-let masterData = []; // Datos crudos de la BD
-let currentData = []; // Datos filtrados
+let masterData = []; // Datos originales (Fuente de verdad)
+let currentData = []; // Datos que se ven en pantalla
 let sortCol = 'ratio'; 
 let sortAsc = false;
-let searchTimer = null;
 let chartInstance = null;
+let searchTimer = null;
 
-// --- INICIO ---
+// --- 1. INICIALIZACIÓN ---
 window.onload = function() {
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
@@ -17,88 +17,94 @@ window.onload = function() {
     } else {
         document.getElementById('config-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
+        
         try {
             supabase = window.supabase.createClient(url, key);
             initAutocomplete(); 
-            loadData();
+            loadData(); // Carga inicial
         } catch (e) {
-            alert("Error crítico. Reset.");
+            alert("Error crítico de configuración.");
             resetConfig();
         }
     }
 };
 
-// --- CARGA DE DATOS ---
+// --- 2. CARGA DE DATOS ---
 async function loadData() {
     if (currentMode === 'search') return;
 
-    // Resetear UI
+    // Reset Visual
     document.getElementById('view-table').classList.remove('hidden');
     document.getElementById('view-search').classList.add('hidden');
     document.getElementById('toolbar').classList.remove('hidden');
     document.getElementById('status-text').innerText = "Cargando...";
-    document.getElementById('table-body').innerHTML = ''; // Limpiar visualmente
+    document.getElementById('table-body').innerHTML = ''; 
 
+    // Configurar llamada RPC
     let rpcName, metricLabel;
-    
     if (currentMode === 'arbitrage') { 
-        rpcName = 'get_arbitrage_opportunities'; 
-        metricLabel = 'Gap'; 
-        sortCol = 'ratio'; sortAsc = false;
+        rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
-        rpcName = 'get_us_spikes'; 
-        metricLabel = 'Subida %'; 
-        sortCol = 'ratio'; sortAsc = false;
+        rpcName = 'get_us_spikes'; metricLabel = 'Subida %'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'demand') { 
-        rpcName = 'get_demand_spikes'; 
-        metricLabel = 'Demanda 7d'; 
-        sortCol = 'ratio'; sortAsc = false;
+        rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; sortCol = 'ratio'; sortAsc = false;
     }
 
+    // Llamada a Supabase
     const { data, error } = await supabase.rpc(rpcName);
     
     if (error) { 
-        alert("Error de BD: " + error.message); 
+        console.error(error);
+        alert("Error Base de Datos: " + error.message); 
         return; 
     }
     
-    // GUARDAR DATOS MAESTROS
-    masterData = data || [];
-    
-    // Si no hay datos, avisamos, pero no rompemos
-    if (masterData.length === 0) {
-        document.getElementById('status-text').innerText = "0 resultados";
-        document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos disponibles.</td></tr>`;
+    // Si no hay datos, mostramos aviso
+    if (!data || data.length === 0) {
+        document.getElementById('status-text').innerText = "Sin resultados";
+        document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">No hay datos para mostrar hoy.</td></tr>`;
+        masterData = [];
         return;
     }
 
+    // --- CORRECCIÓN CRÍTICA: RENDERIZADO INMEDIATO ---
+    // Guardamos los datos
+    masterData = data;
     document.getElementById('col-metric').innerText = metricLabel;
+
+    // 1. Inicializamos currentData con TODO (sin filtrar aún)
+    currentData = [...masterData];
     
-    // LLAMADA CRÍTICA: Aplicar filtros y renderizar
-    applyFilters();
+    // 2. Ordenamos por defecto (para que salga lo mejor arriba)
+    doSort();
+
+    // 3. Renderizamos INMEDIATAMENTE (Esto asegura que veas datos)
+    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+    renderTable();
+
+    // 4. Si hay algo escrito en el filtro, lo aplicamos después
+    const filterVal = document.getElementById('filter-min-eur').value;
+    if (filterVal && parseFloat(filterVal) > 0) {
+        applyFilters();
+    }
 }
 
-// --- FILTROS Y ORDENACIÓN ---
+// --- 3. FILTROS Y ORDENACIÓN ---
 function applyFilters() {
-    // Leemos el input. Si está vacío o es inválido, asumimos 0.
-    const inputElement = document.getElementById('filter-min-eur');
-    let minEur = 0;
+    // Leemos el input
+    const input = document.getElementById('filter-min-eur');
+    let minEur = input.value ? parseFloat(input.value) : 0;
     
-    if (inputElement && inputElement.value) {
-        minEur = parseFloat(inputElement.value);
-        if (isNaN(minEur)) minEur = 0;
-    }
+    if (isNaN(minEur)) minEur = 0;
 
-    // Filtramos masterData
+    // Filtramos sobre masterData
     currentData = masterData.filter(item => {
         const price = item.eur ? parseFloat(item.eur) : 0;
         return price >= minEur;
     });
 
-    // Ordenamos
+    // Re-ordenamos y pintamos
     doSort();
-    
-    // Renderizamos
     document.getElementById('status-text').innerText = `${currentData.length} resultados`;
     renderTable();
 }
@@ -110,7 +116,8 @@ function sortBy(column) {
         sortCol = column;
         sortAsc = false;
     }
-    applyFilters(); // Re-aplicar orden y renderizar
+    // Al ordenar, aplicamos también el filtro vigente
+    applyFilters();
 }
 
 function doSort() {
@@ -118,24 +125,26 @@ function doSort() {
         let valA = a[sortCol];
         let valB = b[sortCol];
 
-        if (valA === null || valA === undefined) valA = 0;
-        if (valB === null || valB === undefined) valB = 0;
+        // Protección nulos
+        if (valA == null) valA = 0;
+        if (valB == null) valB = 0;
 
+        // Si es texto
         if (typeof valA === 'string') {
             return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        } else {
-            return sortAsc ? valA - valB : valB - valA;
         }
+        // Si es número
+        return sortAsc ? valA - valB : valB - valA;
     });
 }
 
-// --- RENDERIZADO ---
+// --- 4. RENDERIZADO DE TABLA ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     tbody.innerHTML = '';
     
     if (currentData.length === 0) { 
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos tras filtrar.</td></tr>`; 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado. Baja el filtro de precio.</td></tr>`; 
         return; 
     }
 
@@ -143,6 +152,7 @@ function renderTable() {
         let val, color;
         const ratio = parseFloat(item.ratio || 0);
 
+        // Estilos según modo
         if (currentMode === 'arbitrage') { 
             val = ratio.toFixed(2)+'x'; 
             color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
@@ -179,7 +189,7 @@ function renderTable() {
                 <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="icon-group flex justify-center gap-1">
-                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
+                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Historial">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
                         <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
@@ -188,7 +198,7 @@ function renderTable() {
                         <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
                         </a>
-                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDHRec">
+                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDH">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                         </a>
                     </div>
@@ -199,6 +209,7 @@ function renderTable() {
     });
 }
 
+// --- 5. GRÁFICAS Y HELPERS ---
 function getLinks(item) {
     const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
@@ -207,56 +218,51 @@ function getLinks(item) {
     return { mkmLink, ckLink, edhLink };
 }
 
-// --- GRÁFICAS ---
 async function openChart(i) {
     const item = currentData[i];
-    const modal = document.getElementById('chart-modal');
-    
-    if (!item) { alert("Error: Elemento no encontrado."); return; }
+    if (!item) return;
 
+    const modal = document.getElementById('chart-modal');
     modal.classList.remove('hidden');
     document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
     
     if (chartInstance) chartInstance.destroy();
 
-    try {
-        const { data, error } = await supabase.rpc('get_card_history', { 
-            target_card_name: item.name, 
-            target_set_code: item.set_code 
-        });
+    const { data, error } = await supabase.rpc('get_card_history', { 
+        target_card_name: item.name, 
+        target_set_code: item.set_code 
+    });
 
-        if (error) { alert("Error SQL: " + error.message); modal.classList.add('hidden'); return; }
-        if (!data || data.length === 0) { alert("Sin historial."); modal.classList.add('hidden'); return; }
-
-        const ctx = document.getElementById('priceChart').getContext('2d');
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
-                datasets: [
-                    { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
-                    { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
-                    { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y_rank', hidden: false, borderWidth: 1 }
-                ]
-            },
-            options: { 
-                maintainAspectRatio: false,
-                responsive: true,
-                interaction: { mode: 'index', intersect: false },
-                scales: { 
-                    y_price: { type: 'linear', position: 'right', beginAtZero: false, title: {display: true, text: 'Precio'} },
-                    y_rank: { type: 'linear', position: 'left', reverse: true, grid: { drawOnChartArea: false }, title: {display: true, text: 'Rank #'} }
-                }
-            }
-        });
-
-    } catch (err) {
-        alert("Error JS: " + err.message);
+    if (error || !data || data.length === 0) {
+        alert(error ? "Error: " + error.message : "Sin historial.");
         modal.classList.add('hidden');
+        return;
     }
+
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
+            datasets: [
+                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
+                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
+                { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y_rank', hidden: false, borderWidth: 1 }
+            ]
+        },
+        options: { 
+            maintainAspectRatio: false,
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: { 
+                y_price: { type: 'linear', position: 'right', beginAtZero: false, title: {display: true, text: 'Precio'} },
+                y_rank: { type: 'linear', position: 'left', reverse: true, grid: { drawOnChartArea: false }, title: {display: true, text: 'Rank #'} }
+            }
+        }
+    });
 }
 
-// --- UTILIDADES ---
+// --- 6. UTILIDADES VARIAS ---
 function switchMode(mode) {
     currentMode = mode;
     ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
@@ -267,7 +273,7 @@ function switchMode(mode) {
     if (mode === 'search') {
         document.getElementById('view-table').classList.add('hidden');
         document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('toolbar').classList.add('hidden'); 
+        document.getElementById('toolbar').classList.add('hidden');
         document.getElementById('search-input').focus();
     } else {
         document.getElementById('view-table').classList.remove('hidden');
@@ -276,6 +282,120 @@ function switchMode(mode) {
         document.getElementById('search-input').value = '';
         loadData();
     }
+}
+
+function initAutocomplete() {
+    const input = document.getElementById('search-input');
+    const list = document.getElementById('suggestions-list');
+
+    input.addEventListener('input', (e) => {
+        const term = e.target.value.trim();
+        clearTimeout(searchTimer);
+        if (term.length < 3) { list.classList.add('hidden'); return; }
+
+        searchTimer = setTimeout(async () => {
+            const { data } = await supabase.rpc('search_cards', { keyword: term });
+            if (!data || !data.length) { list.classList.add('hidden'); return; }
+
+            const uniques = [...new Set(data.map(i => i.name))].slice(0, 8);
+            list.innerHTML = '';
+            
+            uniques.forEach(name => {
+                const li = document.createElement('li');
+                li.className = 'px-4 py-3 text-sm font-medium hover:bg-indigo-50 cursor-pointer border-b border-slate-50 flex items-center gap-2';
+                li.innerHTML = `🔍 ${name}`;
+                li.onclick = () => performSearch(name);
+                list.appendChild(li);
+            });
+            list.classList.remove('hidden');
+        }, 300);
+    });
+    
+    document.addEventListener('click', (e) => {
+        if(!input.contains(e.target) && !list.contains(e.target)) list.classList.add('hidden');
+    });
+}
+
+async function performSearch(name) {
+    document.getElementById('suggestions-list').classList.add('hidden');
+    document.getElementById('search-input').value = name;
+    document.getElementById('search-placeholder').classList.add('hidden');
+    
+    const grid = document.getElementById('search-results-grid');
+    grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Buscando...</div>';
+
+    const { data } = await supabase.rpc('search_cards', { keyword: name });
+    currentData = data || []; 
+    grid.innerHTML = '';
+
+    if (currentData.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">No encontrado.</div>';
+        return;
+    }
+
+    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+
+    currentData.forEach((item, i) => {
+        const card = document.createElement('div');
+        card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
+        const { mkmLink, ckLink, edhLink } = getLinks(item);
+        
+        const gapHtml = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded border border-green-200">Gap: ${item.ratio}x</span>` : '';
+        const rankChange = item.rank_change || 0;
+        let arrow = rankChange > 0 ? `<span class="rank-up text-sm">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down text-sm">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-gray-300">—</span>');
+
+        card.innerHTML = `
+            <div class="flex p-4 gap-4 items-start">
+                <div class="w-1/3 min-w-[90px] cursor-pointer" onclick="showImage('${item.image_uri}', event)">
+                    <img src="${item.image_uri}" class="w-full rounded-lg shadow-sm hover:opacity-90">
+                </div>
+                <div class="w-2/3 flex flex-col gap-1">
+                    <div>
+                        <div class="font-black text-lg leading-tight text-slate-800">${item.name}</div>
+                        <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">${item.set_code}</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 my-2">
+                        <div class="bg-slate-50 p-2 rounded text-center border">
+                            <div class="text-[10px] text-gray-400 uppercase font-bold">EUR</div>
+                            <div class="font-bold text-slate-700 text-lg">${(item.eur||0).toFixed(2)}€</div>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded text-center border">
+                            <div class="text-[10px] text-gray-400 uppercase font-bold">USD</div>
+                            <div class="font-bold text-slate-500 text-lg">$${(item.usd||0).toFixed(2)}</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-auto border-t border-dashed border-slate-200 pt-2">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] text-gray-400 uppercase font-bold">Rank</span>
+                            <span class="text-xs font-mono font-bold text-slate-600">#${item.edhrec_rank||'?'}</span>
+                        </div>
+                        <div class="flex flex-col text-right">
+                            <span class="text-[10px] text-gray-400 uppercase font-bold">Var. 24h</span>
+                            ${arrow}
+                        </div>
+                    </div>
+                    <div class="mt-2 text-right">${gapHtml}</div>
+                </div>
+            </div>
+            <div class="bg-slate-50 p-3 border-t flex justify-between items-center gap-2">
+                <button onclick="openChart(${i})" class="flex-1 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 py-2 rounded shadow-sm flex items-center justify-center gap-2">
+                    <span>📊</span> Historial
+                </button>
+                <div class="flex gap-1">
+                    <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50" title="MKM">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    </a>
+                    <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 bg-emerald-50" title="CK">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
+                    </a>
+                    <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 bg-purple-50" title="EDH">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </a>
+                </div>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
 }
 
 function showImage(url, e) {
@@ -293,4 +413,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-        }
+                                }

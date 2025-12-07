@@ -51,6 +51,16 @@ async function loadData() {
     renderTable();
 }
 
+// Helper para Links
+function getLinks(item) {
+    const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
+    const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
+    const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
+    const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
+    return { mkmLink, ckLink, edhLink };
+}
+
+// --- RENDER TABLA ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     tbody.innerHTML = '';
@@ -67,10 +77,7 @@ function renderTable() {
         const rankChange = item.rank_change || 0;
         let arrow = rankChange > 0 ? `<span class="rank-up">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-slate-300">—</span>');
 
-        // LINKS
-        const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
-        const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
-        const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
+        const { mkmLink, ckLink, edhLink } = getLinks(item);
 
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50 transition-colors">
@@ -93,7 +100,7 @@ function renderTable() {
                         <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
-                        <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
+                        <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                         </a>
                         <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CardKingdom">
@@ -118,7 +125,6 @@ function initAutocomplete() {
     input.addEventListener('input', (e) => {
         const term = e.target.value.trim();
         clearTimeout(searchTimer);
-        
         if (term.length < 3) { list.classList.add('hidden'); return; }
 
         searchTimer = setTimeout(async () => {
@@ -162,20 +168,16 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+    document.getElementById('status-text').innerText = `${currentData.length} versiones`;
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
         card.className = "card-sheet bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col";
+        const { mkmLink, ckLink, edhLink } = getLinks(item);
         
         const gapHtml = item.ratio > 1.5 ? `<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded border border-green-200">Gap: ${item.ratio}x</span>` : '';
         const rankChange = item.rank_change || 0;
         let arrow = rankChange > 0 ? `<span class="rank-up text-sm">▲ ${rankChange}</span>` : (rankChange < 0 ? `<span class="rank-down text-sm">▼ ${Math.abs(rankChange)}</span>` : '<span class="text-gray-300">—</span>');
-
-        // LINKS
-        const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
-        const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
-        const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
 
         card.innerHTML = `
             <div class="flex p-4 gap-4 items-start">
@@ -213,9 +215,11 @@ async function performSearch(name) {
                 </div>
             </div>
             <div class="bg-slate-50 p-3 border-t flex justify-between items-center gap-2">
-                <button onclick="openChart(${i})" class="flex-1 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 py-2 rounded shadow-sm">📊 Historial</button>
+                <button onclick="openChart(${i})" class="flex-1 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 py-2 rounded shadow-sm flex items-center justify-center gap-2">
+                    <span>📊</span> Historial
+                </button>
                 <div class="flex gap-1">
-                    <a href="${item.mkm_link}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50" title="MKM">
+                    <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50" title="MKM">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                     </a>
                     <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 bg-emerald-50" title="CK">
@@ -231,6 +235,65 @@ async function performSearch(name) {
     });
 }
 
+// --- GRÁFICAS ---
+async function openChart(i) {
+    const item = currentData[i];
+    const modal = document.getElementById('chart-modal');
+    
+    if (!item) return alert("Error: Elemento no encontrado.");
+
+    modal.classList.remove('hidden');
+    document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
+    
+    if (chartInstance) chartInstance.destroy();
+
+    try {
+        const { data, error } = await supabase.rpc('get_card_history', { 
+            target_card_name: item.name, 
+            target_set_code: item.set_code 
+        });
+
+        if (error) {
+            alert("Error SQL: " + error.message);
+            modal.classList.add('hidden');
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            alert("No hay historial disponible.");
+            modal.classList.add('hidden');
+            return;
+        }
+
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
+                datasets: [
+                    { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3, pointRadius: 2 },
+                    { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 },
+                    { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y1', hidden: false }
+                ]
+            },
+            options: { 
+                maintainAspectRatio: false,
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: { 
+                    y: { beginAtZero: false, position: 'left' }, 
+                    y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } } 
+                }
+            }
+        });
+
+    } catch (err) {
+        alert("Error JS: " + err.message);
+        modal.classList.add('hidden');
+    }
+}
+
+// --- HELPERS ---
 function switchMode(mode) {
     currentMode = mode;
     ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
@@ -254,50 +317,6 @@ function switchMode(mode) {
     }
 }
 
-async function openChart(i) {
-    const item = currentData[i];
-    
-    if (!item) { console.error("Error: Item no encontrado"); return; }
-
-    document.getElementById('modal-chart').classList.remove('hidden');
-    document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
-    
-    if (chartInstance) chartInstance.destroy();
-
-    // AHORA USAMOS EL ID EXACTO (item.id)
-    // Esto evita que se mezclen versiones normales, foil, etc.
-    const { data } = await supabase.rpc('get_card_history', { target_card_id: item.id });
-    
-    if (!data || data.length === 0) {
-        alert("Sin historial para esta versión exacta.");
-        document.getElementById('modal-chart').classList.add('hidden');
-        return;
-    }
-
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
-            datasets: [
-                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, borderWidth: 2 },
-                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, borderWidth: 2 },
-                { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y1', hidden: false, borderWidth: 1 }
-            ]
-        },
-        options: { 
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: { 
-                y: { beginAtZero: false, position: 'left', title: {display:true, text:'Precio'} }, 
-                y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false }, title: {display:true, text:'Rank'} } 
-            }
-        }
-    });
-        }
-
-
-
 function showImage(url, e) {
     e.stopPropagation();
     document.getElementById('enlarged-image').src = url;
@@ -314,4 +333,4 @@ function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
             }
-                        
+        

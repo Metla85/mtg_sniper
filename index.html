@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V22</title>
+    <title>MTG Sniper V23</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -40,24 +40,31 @@
             <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
         </div>
 
-        <div id="status-bar" class="flex justify-between items-center mb-4 px-2">
-            <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
-            <button id="copy-btn" onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm">Copiar</button>
+        <div id="toolbar" class="flex justify-between items-center mb-4 px-2 gap-2">
+            <div class="flex items-center gap-2 flex-1">
+                <span class="text-xs font-bold text-slate-500">Min €:</span>
+                <input type="number" id="filter-min-eur" placeholder="0" class="w-16 p-1 text-sm border rounded text-center font-mono focus:border-indigo-500 outline-none" oninput="applyFilters()">
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <p class="text-xs text-slate-500 font-bold" id="status-text">Cargando...</p>
+                <button id="copy-btn" onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1 px-2 rounded text-xs shadow-sm">Copiar</button>
+            </div>
         </div>
 
         <div id="view-table" class="mx-1 bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
-                    <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold select-none">
                         <tr>
-                            <th class="px-4 py-3 text-left pl-6">Carta</th>
+                            <th class="px-4 py-3 text-left pl-6 cursor-pointer hover:bg-slate-100" onclick="sortBy('name')">Carta ↕</th>
                             <th class="px-2 py-3 text-center">Set</th>
-                            <th class="px-4 py-3 text-right">EUR</th>
-                            <th class="hide-mobile px-4 py-3 text-right">USD</th>
-                            <th class="px-4 py-3 text-center" id="col-metric">Gap</th>
-                            <th class="px-4 py-3 text-center">Rank</th>
+                            <th class="px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onclick="sortBy('eur')">EUR ↕</th>
+                            <th class="hide-mobile px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onclick="sortBy('usd')">USD ↕</th>
+                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('ratio')">Gap ↕</th>
+                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('edhrec_rank')">Rank ↕</th>
                             <th class="px-4 py-3 text-center">Var.</th>
-                            <th class="px-4 py-3 text-center">Acciones</th>
+                            <th class="px-4 py-3 text-center">Acc</th>
                         </tr>
                     </thead>
                     <tbody id="table-body"></tbody>
@@ -95,5 +102,4 @@
 
     <script src="app.js"></script>
 </body>
-    </html>
-    
+</html>

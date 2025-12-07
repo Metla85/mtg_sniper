@@ -1,23 +1,21 @@
 let supabase = null;
 let currentMode = 'arbitrage';
-let masterData = []; 
-let currentData = []; 
+let masterData = []; // Datos originales (Fuente de verdad)
+let currentData = []; // Datos que se ven en pantalla
 let sortCol = 'ratio'; 
 let sortAsc = false;
-let searchTimer = null;
 let chartInstance = null;
+let searchTimer = null;
 
 // --- HELPERS SEGUROS PARA UI (Evita el crash "cannot set properties of null") ---
 function uiSetText(id, text) {
     const el = document.getElementById(id);
     if (el) el.innerText = text;
-    else console.warn(`UI Warning: Elemento '${id}' no encontrado.`);
 }
 
 function uiSetHTML(id, html) {
     const el = document.getElementById(id);
     if (el) el.innerHTML = html;
-    else console.warn(`UI Warning: Elemento '${id}' no encontrado.`);
 }
 
 function uiShow(id) {
@@ -33,7 +31,7 @@ function uiHide(id) {
 // --- 1. INICIALIZACIÓN ---
 window.onload = function() {
     if (typeof window.supabase === 'undefined') {
-        alert("Error de red: Librería Supabase no cargada."); return;
+        alert("Error crítico: Librería Supabase no cargada."); return;
     }
 
     const url = localStorage.getItem('supabase_url');
@@ -72,12 +70,16 @@ async function loadData() {
 
     let rpcName, metricLabel;
     
+    // CONFIGURACIÓN DE MODOS
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
         rpcName = 'get_us_spikes'; metricLabel = 'Subida %'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'demand') { 
         rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; sortCol = 'ratio'; sortAsc = false;
+    } else if (currentMode === 'radar') {
+        // NUEVO MODO RADAR
+        rpcName = 'get_modern_radar'; metricLabel = '% Uso'; sortCol = 'popularity'; sortAsc = false;
     }
 
     try {
@@ -87,7 +89,7 @@ async function loadData() {
         
         if (!data || data.length === 0) {
             uiSetText('status-text', "0 resultados");
-            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`);
+            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos disponibles.</td></tr>`);
             masterData = [];
             return;
         }
@@ -100,7 +102,7 @@ async function loadData() {
         currentData = [...masterData];
         doSort(); 
         
-        // Aplicar filtro si existe
+        // Aplicar filtro si existe valor en el input
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) {
             applyFilters();
@@ -112,11 +114,11 @@ async function loadData() {
     } catch (err) {
         console.error("Error loadData:", err);
         alert("Error cargando datos: " + err.message);
-        uiSetText('status-text', "Error");
+        uiSetText('status-text', "Error API");
     }
 }
 
-// --- 3. FILTROS ---
+// --- 3. FILTROS Y ORDENACIÓN ---
 function applyFilters() {
     const input = document.getElementById('filter-min-eur');
     let minEur = (input && input.value) ? parseFloat(input.value) : 0;
@@ -156,10 +158,10 @@ function doSort() {
     });
 }
 
-// --- 4. RENDER ---
+// --- 4. RENDERIZADO TABLA ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
-    if (!tbody) return; // Seguridad extra
+    if (!tbody) return;
     
     tbody.innerHTML = '';
     
@@ -170,17 +172,29 @@ function renderTable() {
 
     currentData.forEach((item, index) => {
         let val, color;
-        const ratio = parseFloat(item.ratio || 0);
-
-        if (currentMode === 'arbitrage') { 
-            val = ratio.toFixed(2)+'x'; 
-            color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
-        } else if (currentMode === 'trend') { 
-            val = '+'+ratio.toFixed(0)+'%'; 
-            color = 'ratio-high'; 
-        } else { 
-            val = '+'+Math.round(ratio)+'%'; 
-            color = 'bg-amber-100 text-amber-800 border border-amber-200'; 
+        
+        // LÓGICA VISUAL SEGÚN MODO
+        if (currentMode === 'radar') {
+            // Radar usa 'popularity', no 'ratio'
+            let pop = parseFloat(item.popularity || 0);
+            val = pop.toFixed(1) + '%';
+            // Rojo si aparece en >20% de mazos, Azul si es normal
+            color = pop > 20 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-blue-50 text-blue-800 border border-blue-200';
+        } 
+        else {
+            // Modos normales usan 'ratio'
+            let ratio = parseFloat(item.ratio || 0);
+            
+            if (currentMode === 'arbitrage') { 
+                val = ratio.toFixed(2)+'x'; 
+                color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
+            } else if (currentMode === 'trend') { 
+                val = '+'+ratio.toFixed(0)+'%'; 
+                color = 'ratio-high'; 
+            } else { 
+                val = '+'+Math.round(ratio)+'%'; 
+                color = 'bg-amber-100 text-amber-800 border border-amber-200'; 
+            }
         }
         
         const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
@@ -228,6 +242,7 @@ function renderTable() {
     });
 }
 
+// --- 5. GRÁFICAS ---
 function getLinks(item) {
     const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
@@ -236,10 +251,9 @@ function getLinks(item) {
     return { mkmLink, ckLink, edhLink };
 }
 
-// --- 5. GRÁFICAS ---
 async function openChart(i) {
     const item = currentData[i];
-    if (!item) { alert("Ítem no encontrado"); return; }
+    if (!item) { alert("Error: Elemento no encontrado."); return; }
 
     const modal = document.getElementById('chart-modal');
     uiShow('chart-modal');
@@ -255,7 +269,7 @@ async function openChart(i) {
 
         if (error || !data || data.length === 0) {
             uiHide('chart-modal');
-            alert("Sin historial.");
+            alert(error ? "Error SQL: " + error.message : "Sin historial.");
             return;
         }
 
@@ -285,14 +299,15 @@ async function openChart(i) {
         uiHide('chart-modal');
         alert("Error gráfica: " + err.message);
     }
-}
-
+        }
 // --- 6. UTILIDADES ---
 function switchMode(mode) {
     currentMode = mode;
-    ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
+    ['arbitrage', 'trend', 'demand', 'search', 'radar'].forEach(m => {
         const btn = document.getElementById('tab-'+m);
-        btn.className = (m === mode) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
+        if (btn) {
+            btn.className = (m === mode) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
+        }
     });
 
     if (mode === 'search') {
@@ -307,6 +322,12 @@ function switchMode(mode) {
         document.getElementById('search-input').value = '';
         loadData();
     }
+}
+
+function showImage(url, e) {
+    e.stopPropagation();
+    document.getElementById('enlarged-image').src = url;
+    uiShow('image-modal');
 }
 
 function initAutocomplete() {
@@ -324,6 +345,7 @@ function initAutocomplete() {
 
             const uniques = [...new Set(data.map(i => i.name))].slice(0, 8);
             list.innerHTML = '';
+            
             uniques.forEach(name => {
                 const li = document.createElement('li');
                 li.className = 'px-4 py-3 text-sm font-medium hover:bg-indigo-50 cursor-pointer border-b border-slate-50 flex items-center gap-2';
@@ -421,12 +443,6 @@ async function performSearch(name) {
         `;
         grid.appendChild(card);
     });
-}
-
-function showImage(url, e) {
-    e.stopPropagation();
-    document.getElementById('enlarged-image').src = url;
-    uiShow('image-modal');
 }
 
 function saveConfig() {

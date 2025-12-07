@@ -1,33 +1,47 @@
 let supabase = null;
 let currentMode = 'arbitrage';
-let masterData = []; // Datos originales (Fuente de verdad)
-let currentData = []; // Datos que se ven en pantalla
+let masterData = []; 
+let currentData = []; 
 let sortCol = 'ratio'; 
 let sortAsc = false;
-let chartInstance = null;
 let searchTimer = null;
+let chartInstance = null;
 
-// --- 1. INICIALIZACIÓN ---
+// --- 1. INICIALIZACIÓN SEGURA ---
 window.onload = function() {
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
 
+    // 1. Comprobación de Credenciales
     if (!url || !key) {
-        document.getElementById('config-screen').classList.remove('hidden');
-    } else {
+        showLogin();
+        return;
+    }
+
+    // 2. Intento de Conexión (Aislado para no borrar credenciales por error)
+    try {
+        supabase = window.supabase.createClient(url, key);
+        
+        // Si llegamos aquí, la librería cargó bien. 
+        // Ocultamos login y mostramos app.
         document.getElementById('config-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
         
-        try {
-            supabase = window.supabase.createClient(url, key);
-            initAutocomplete(); 
-            loadData(); // Carga inicial
-        } catch (e) {
-            alert("Error crítico de configuración.");
-            resetConfig();
-        }
+        // Iniciamos la lógica
+        initAutocomplete(); 
+        loadData(); 
+
+    } catch (e) {
+        console.error("Error crítico de inicialización:", e);
+        alert("Error al conectar con las librerías. Revisa tu conexión a internet.");
+        // NO reseteamos config aquí para no molestar al usuario si es un fallo de red.
     }
 };
+
+function showLogin() {
+    document.getElementById('config-screen').classList.remove('hidden');
+    document.getElementById('main-screen').classList.add('hidden');
+}
 
 // --- 2. CARGA DE DATOS ---
 async function loadData() {
@@ -40,8 +54,9 @@ async function loadData() {
     document.getElementById('status-text').innerText = "Cargando...";
     document.getElementById('table-body').innerHTML = ''; 
 
-    // Configurar llamada RPC
     let rpcName, metricLabel;
+    
+    // Configuración
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
@@ -50,63 +65,62 @@ async function loadData() {
         rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; sortCol = 'ratio'; sortAsc = false;
     }
 
-    // Llamada a Supabase
-    const { data, error } = await supabase.rpc(rpcName);
-    
-    if (error) { 
-        console.error(error);
-        alert("Error Base de Datos: " + error.message); 
-        return; 
-    }
-    
-    // Si no hay datos, mostramos aviso
-    if (!data || data.length === 0) {
-        document.getElementById('status-text').innerText = "Sin resultados";
-        document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">No hay datos para mostrar hoy.</td></tr>`;
-        masterData = [];
-        return;
-    }
+    try {
+        const { data, error } = await supabase.rpc(rpcName);
+        
+        if (error) { throw error; }
+        
+        // Si no hay datos
+        if (!data || data.length === 0) {
+            document.getElementById('status-text').innerText = "0 resultados";
+            document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos. (Revisa si el scraper corrió hoy)</td></tr>`;
+            masterData = [];
+            return;
+        }
 
-    // --- CORRECCIÓN CRÍTICA: RENDERIZADO INMEDIATO ---
-    // Guardamos los datos
-    masterData = data;
-    document.getElementById('col-metric').innerText = metricLabel;
+        // ÉXITO
+        masterData = data;
+        document.getElementById('col-metric').innerText = metricLabel;
 
-    // 1. Inicializamos currentData con TODO (sin filtrar aún)
-    currentData = [...masterData];
-    
-    // 2. Ordenamos por defecto (para que salga lo mejor arriba)
-    doSort();
+        // Renderizado inicial (sin filtros estrictos para asegurar que se vea algo)
+        currentData = [...masterData];
+        doSort(); // Ordenar
+        
+        // Aplicar filtro si el usuario ya escribió algo, si no, mostrar todo
+        const filterInput = document.getElementById('filter-min-eur');
+        if (filterInput && parseFloat(filterInput.value) > 0) {
+            applyFilters();
+        } else {
+            document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+            renderTable();
+        }
 
-    // 3. Renderizamos INMEDIATAMENTE (Esto asegura que veas datos)
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
-    renderTable();
-
-    // 4. Si hay algo escrito en el filtro, lo aplicamos después
-    const filterVal = document.getElementById('filter-min-eur').value;
-    if (filterVal && parseFloat(filterVal) > 0) {
-        applyFilters();
+    } catch (err) {
+        console.error("Error en loadData:", err);
+        alert("Error cargando datos: " + err.message);
+        document.getElementById('status-text').innerText = "Error API";
     }
 }
 
 // --- 3. FILTROS Y ORDENACIÓN ---
 function applyFilters() {
-    // Leemos el input
-    const input = document.getElementById('filter-min-eur');
-    let minEur = input.value ? parseFloat(input.value) : 0;
-    
-    if (isNaN(minEur)) minEur = 0;
+    try {
+        const input = document.getElementById('filter-min-eur');
+        // Si el input está vacío o es inválido, asumimos 0
+        let minEur = (input && input.value) ? parseFloat(input.value) : 0;
+        if (isNaN(minEur)) minEur = 0;
 
-    // Filtramos sobre masterData
-    currentData = masterData.filter(item => {
-        const price = item.eur ? parseFloat(item.eur) : 0;
-        return price >= minEur;
-    });
+        currentData = masterData.filter(item => {
+            const price = item.eur ? parseFloat(item.eur) : 0;
+            return price >= minEur;
+        });
 
-    // Re-ordenamos y pintamos
-    doSort();
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
-    renderTable();
+        doSort();
+        document.getElementById('status-text').innerText = `${currentData.length} resultados`;
+        renderTable();
+    } catch (e) {
+        console.error("Error filtrando:", e);
+    }
 }
 
 function sortBy(column) {
@@ -116,7 +130,6 @@ function sortBy(column) {
         sortCol = column;
         sortAsc = false;
     }
-    // Al ordenar, aplicamos también el filtro vigente
     applyFilters();
 }
 
@@ -125,26 +138,23 @@ function doSort() {
         let valA = a[sortCol];
         let valB = b[sortCol];
 
-        // Protección nulos
         if (valA == null) valA = 0;
         if (valB == null) valB = 0;
 
-        // Si es texto
         if (typeof valA === 'string') {
             return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
-        // Si es número
         return sortAsc ? valA - valB : valB - valA;
     });
 }
 
-// --- 4. RENDERIZADO DE TABLA ---
+// --- 4. RENDERIZADO ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     tbody.innerHTML = '';
     
-    if (currentData.length === 0) { 
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado. Baja el filtro de precio.</td></tr>`; 
+    if (!currentData || currentData.length === 0) { 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado.</td></tr>`; 
         return; 
     }
 
@@ -152,7 +162,6 @@ function renderTable() {
         let val, color;
         const ratio = parseFloat(item.ratio || 0);
 
-        // Estilos según modo
         if (currentMode === 'arbitrage') { 
             val = ratio.toFixed(2)+'x'; 
             color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
@@ -189,7 +198,7 @@ function renderTable() {
                 <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="icon-group flex justify-center gap-1">
-                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Historial">
+                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
                         <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
@@ -198,7 +207,7 @@ function renderTable() {
                         <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
                         </a>
-                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDH">
+                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDHRec">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                         </a>
                     </div>
@@ -209,7 +218,6 @@ function renderTable() {
     });
 }
 
-// --- 5. GRÁFICAS Y HELPERS ---
 function getLinks(item) {
     const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
@@ -218,6 +226,7 @@ function getLinks(item) {
     return { mkmLink, ckLink, edhLink };
 }
 
+// --- 5. GRÁFICAS ---
 async function openChart(i) {
     const item = currentData[i];
     if (!item) return;
@@ -228,41 +237,47 @@ async function openChart(i) {
     
     if (chartInstance) chartInstance.destroy();
 
-    const { data, error } = await supabase.rpc('get_card_history', { 
-        target_card_name: item.name, 
-        target_set_code: item.set_code 
-    });
+    try {
+        const { data, error } = await supabase.rpc('get_card_history', { 
+            target_card_name: item.name, 
+            target_set_code: item.set_code 
+        });
 
-    if (error || !data || data.length === 0) {
-        alert(error ? "Error: " + error.message : "Sin historial.");
-        modal.classList.add('hidden');
-        return;
-    }
-
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
-            datasets: [
-                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
-                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
-                { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y_rank', hidden: false, borderWidth: 1 }
-            ]
-        },
-        options: { 
-            maintainAspectRatio: false,
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            scales: { 
-                y_price: { type: 'linear', position: 'right', beginAtZero: false, title: {display: true, text: 'Precio'} },
-                y_rank: { type: 'linear', position: 'left', reverse: true, grid: { drawOnChartArea: false }, title: {display: true, text: 'Rank #'} }
-            }
+        if (error || !data || data.length === 0) {
+            alert(error ? "Error SQL: " + error.message : "Sin historial.");
+            modal.classList.add('hidden');
+            return;
         }
-    });
+
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
+                datasets: [
+                    { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
+                    { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
+                    { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y_rank', hidden: false, borderWidth: 1 }
+                ]
+            },
+            options: { 
+                maintainAspectRatio: false,
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: { 
+                    y_price: { type: 'linear', position: 'right', beginAtZero: false, title: {display: true, text: 'Precio'} },
+                    y_rank: { type: 'linear', position: 'left', reverse: true, grid: { drawOnChartArea: false }, title: {display: true, text: 'Rank #'} }
+                }
+            }
+        });
+
+    } catch (err) {
+        alert("Error JS en gráfica: " + err.message);
+        modal.classList.add('hidden');
+    }
 }
 
-// --- 6. UTILIDADES VARIAS ---
+// --- 6. UTILIDADES ---
 function switchMode(mode) {
     currentMode = mode;
     ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
@@ -299,7 +314,6 @@ function initAutocomplete() {
 
             const uniques = [...new Set(data.map(i => i.name))].slice(0, 8);
             list.innerHTML = '';
-            
             uniques.forEach(name => {
                 const li = document.createElement('li');
                 li.className = 'px-4 py-3 text-sm font-medium hover:bg-indigo-50 cursor-pointer border-b border-slate-50 flex items-center gap-2';
@@ -413,4 +427,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-                                }
+            }

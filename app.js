@@ -68,8 +68,12 @@ async function loadData() {
     uiSetText('status-text', "Cargando...");
     uiSetHTML('table-body', '');
 
-    let rpcName, metricLabel;
+    let rpcName = null;     // Inicializamos a null
+    let metricLabel = '';
     
+    // DEBUG: Ver qué modo está intentando cargar
+    console.log("Modo actual:", currentMode);
+
     // CONFIGURACIÓN DE MODOS
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
@@ -78,18 +82,30 @@ async function loadData() {
     } else if (currentMode === 'demand') { 
         rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'radar') {
-        // NUEVO MODO RADAR
         rpcName = 'get_modern_radar'; metricLabel = '% Uso'; sortCol = 'popularity'; sortAsc = false;
+    } else {
+        // SEGURIDAD: Si el modo no existe, forzamos Arbitraje
+        console.warn("Modo desconocido:", currentMode, "-> Forzando Arbitraje");
+        currentMode = 'arbitrage';
+        rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap';
+    }
+
+    // SI AÚN ASÍ ES NULL (Doble seguridad)
+    if (!rpcName) {
+        alert("Error interno: No se ha seleccionado ninguna función SQL.");
+        return;
     }
 
     try {
+        console.log(`📡 Llamando a Supabase RPC: ${rpcName}`);
+        
         const { data, error } = await supabase.rpc(rpcName);
         
         if (error) { throw error; }
         
         if (!data || data.length === 0) {
             uiSetText('status-text', "0 resultados");
-            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos disponibles.</td></tr>`);
+            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">Consulta exitosa, pero sin datos.</td></tr>`);
             masterData = [];
             return;
         }
@@ -98,11 +114,10 @@ async function loadData() {
         masterData = data;
         uiSetText('col-metric', metricLabel);
 
-        // Renderizado inicial
+        // Renderizado
         currentData = [...masterData];
         doSort(); 
         
-        // Aplicar filtro si existe valor en el input
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) {
             applyFilters();
@@ -113,10 +128,16 @@ async function loadData() {
 
     } catch (err) {
         console.error("Error loadData:", err);
-        alert("Error cargando datos: " + err.message);
+        // Filtramos el mensaje de error para que sea legible
+        let msg = err.message;
+        if (msg.includes("function") && msg.includes("does not exist")) {
+            msg = "Falta ejecutar el Script SQL en Supabase (función no encontrada).";
+        }
+        alert("Error cargando datos: " + msg);
         uiSetText('status-text', "Error API");
     }
 }
+
 
 // --- 3. FILTROS Y ORDENACIÓN ---
 function applyFilters() {

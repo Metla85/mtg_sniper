@@ -51,9 +51,10 @@ async function loadData() {
     renderTable();
 }
 
-// Helper para Links
+// --- HELPER LINKS ---
 function getLinks(item) {
     const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
+    // Priorizamos el link de la BD, si no, generamos uno
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
     const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
     const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
@@ -160,7 +161,7 @@ async function performSearch(name) {
     grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Buscando...</div>';
 
     const { data } = await supabase.rpc('search_cards', { keyword: name });
-    currentData = data || [];
+    currentData = data || []; 
     grid.innerHTML = '';
 
     if (currentData.length === 0) {
@@ -168,7 +169,7 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} versiones`;
+    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
@@ -238,62 +239,52 @@ async function performSearch(name) {
 // --- GRÁFICAS ---
 async function openChart(i) {
     const item = currentData[i];
-    const modal = document.getElementById('chart-modal');
     
-    if (!item) return alert("Error: Elemento no encontrado.");
+    if (!item) { alert("Error: Ítem no encontrado"); return; }
 
+    const modal = document.getElementById('chart-modal');
     modal.classList.remove('hidden');
-    document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
+    document.getElementById('modal-title').innerText = item.name + " (" + item.set_code + ")";
     
     if (chartInstance) chartInstance.destroy();
 
-    try {
-        const { data, error } = await supabase.rpc('get_card_history', { 
-            target_card_name: item.name, 
-            target_set_code: item.set_code 
-        });
+    const { data, error } = await supabase.rpc('get_card_history', { 
+        target_card_name: item.name, 
+        target_set_code: item.set_code 
+    });
 
-        if (error) {
-            alert("Error SQL: " + error.message);
-            modal.classList.add('hidden');
-            return;
-        }
-
-        if (!data || data.length === 0) {
-            alert("No hay historial disponible.");
-            modal.classList.add('hidden');
-            return;
-        }
-
-        const ctx = document.getElementById('priceChart').getContext('2d');
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
-                datasets: [
-                    { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3, pointRadius: 2 },
-                    { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 },
-                    { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y1', hidden: false }
-                ]
-            },
-            options: { 
-                maintainAspectRatio: false,
-                responsive: true,
-                interaction: { mode: 'index', intersect: false },
-                scales: { 
-                    y: { beginAtZero: false, position: 'left' }, 
-                    y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false } } 
-                }
-            }
-        });
-
-    } catch (err) {
-        alert("Error JS: " + err.message);
+    if (error) {
+        alert("Error de BD: " + error.message);
         modal.classList.add('hidden');
+        return;
     }
+    
+    if (!data || data.length === 0) {
+        alert("Sin historial.");
+        modal.classList.add('hidden');
+        return;
+    }
+
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
+            datasets: [
+                { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.3, pointRadius: 2 },
+                { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.3, pointRadius: 2 }
+            ]
+        },
+        options: { 
+            maintainAspectRatio: false, 
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: { y: { beginAtZero: false } }
+        }
+    });
 }
 
-// --- HELPERS ---
+// --- UTILIDADES ---
 function switchMode(mode) {
     currentMode = mode;
     ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
@@ -304,15 +295,13 @@ function switchMode(mode) {
     if (mode === 'search') {
         document.getElementById('view-table').classList.add('hidden');
         document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('status-bar').classList.add('hidden'); 
+        document.getElementById('status-bar').classList.add('hidden');
         document.getElementById('search-input').focus();
     } else {
         document.getElementById('view-table').classList.remove('hidden');
         document.getElementById('view-search').classList.add('hidden');
         document.getElementById('status-bar').classList.remove('hidden');
         document.getElementById('search-input').value = '';
-        document.getElementById('search-results-grid').innerHTML = '';
-        document.getElementById('search-placeholder').classList.remove('hidden');
         loadData();
     }
 }
@@ -332,5 +321,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-            }
-        
+}

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V25</title>
+    <title>MTG Sniper V29</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -61,7 +61,7 @@
                             <th class="px-2 py-3 text-center">Set</th>
                             <th class="px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onclick="sortBy('eur')">EUR ↕</th>
                             <th class="hide-mobile px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onclick="sortBy('usd')">USD ↕</th>
-                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('ratio')">Gap ↕</th>
+                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('ratio')" id="col-metric">Gap ↕</th>
                             <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('edhrec_rank')">Rank ↕</th>
                             <th class="px-4 py-3 text-center">Var.</th>
                             <th class="px-4 py-3 text-center">Acc</th>
@@ -102,4 +102,5 @@
 
     <script src="app.js"></script>
 </body>
-</html>
+    </html>
+    

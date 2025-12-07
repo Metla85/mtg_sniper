@@ -13,12 +13,12 @@ body { -webkit-tap-highlight-color: transparent; }
 .rank-up { color: #10b981; font-weight: bold; } 
 .rank-down { color: #ef4444; font-weight: bold; }
 
-/* BÚSQUEDA Y TARJETAS */
+/* SEARCH & CARDS */
+#suggestions-list { max-height: 250px; overflow-y: auto; z-index: 60; }
 .card-sheet { transition: transform 0.2s; }
 .card-sheet:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-#suggestions-list { max-height: 250px; overflow-y: auto; z-index: 60; }
 
-/* UTILIDADES */
+/* ICON BUTTONS */
 .icon-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: 0.2s; }
 .icon-btn:hover { background-color: #e2e8f0; }
 

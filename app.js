@@ -7,34 +7,44 @@ let sortAsc = false;
 let searchTimer = null;
 let chartInstance = null;
 
-// --- 1. INICIALIZACIÓN SEGURA ---
+// --- 1. INICIALIZACIÓN BLINDADA ---
 window.onload = function() {
+    // A. Comprobar si la librería cargó
+    if (typeof window.supabase === 'undefined') {
+        alert("Error: La librería de Supabase no se ha cargado. Revisa tu conexión a internet o bloqueadores de anuncios.");
+        return;
+    }
+
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
 
-    // 1. Comprobación de Credenciales
+    // B. Si no hay claves, mostrar login
     if (!url || !key) {
         showLogin();
         return;
     }
 
-    // 2. Intento de Conexión (Aislado para no borrar credenciales por error)
+    // C. Intentar conectar (Sin borrar datos si falla)
     try {
+        // Validación básica de formato URL
+        if (!url.startsWith('http')) {
+            throw new Error("La URL de Supabase parece incorrecta (debe empezar por https://)");
+        }
+
         supabase = window.supabase.createClient(url, key);
         
-        // Si llegamos aquí, la librería cargó bien. 
-        // Ocultamos login y mostramos app.
+        // Si llegamos aquí, el cliente se creó. Ocultamos login.
         document.getElementById('config-screen').classList.add('hidden');
         document.getElementById('main-screen').classList.remove('hidden');
         
-        // Iniciamos la lógica
+        // Iniciamos la app
         initAutocomplete(); 
         loadData(); 
 
     } catch (e) {
-        console.error("Error crítico de inicialización:", e);
-        alert("Error al conectar con las librerías. Revisa tu conexión a internet.");
-        // NO reseteamos config aquí para no molestar al usuario si es un fallo de red.
+        console.error("Error al iniciar:", e);
+        alert("Error de Configuración: " + e.message + "\n\nPor favor, revisa tus credenciales manualmente.");
+        // NO llamamos a resetConfig() automáticamente.
     }
 };
 
@@ -43,15 +53,15 @@ function showLogin() {
     document.getElementById('main-screen').classList.add('hidden');
 }
 
-// --- 2. CARGA DE DATOS ---
+// --- 2. CARGA DE DATOS SEGURA ---
 async function loadData() {
     if (currentMode === 'search') return;
 
-    // Reset Visual
+    // UI Updates
     document.getElementById('view-table').classList.remove('hidden');
     document.getElementById('view-search').classList.add('hidden');
     document.getElementById('toolbar').classList.remove('hidden');
-    document.getElementById('status-text').innerText = "Cargando...";
+    document.getElementById('status-text').innerText = "Conectando...";
     document.getElementById('table-body').innerHTML = ''; 
 
     let rpcName, metricLabel;
@@ -66,27 +76,48 @@ async function loadData() {
     }
 
     try {
+        console.log(`📡 Llamando a RPC: ${rpcName}`);
+        
         const { data, error } = await supabase.rpc(rpcName);
         
-        if (error) { throw error; }
+        // --- MANEJO DE ERRORES ESPECÍFICOS ---
+        if (error) {
+            console.error("Supabase RPC Error:", error);
+            
+            // Error de autenticación (Claves mal)
+            if (error.code === 'PGRST301' || error.message.includes('JWT')) {
+                alert("Error de Autenticación: Tus claves son incorrectas o han caducado.\n\nEl sistema se reiniciará.");
+                resetConfig(); // AQUÍ SÍ reseteamos porque las claves están mal seguro.
+                return;
+            }
+            
+            // Error de Base de Datos (Función no existe, etc)
+            if (error.code === '42883') {
+                alert("Error SQL: La función no existe en la base de datos. ¿Has ejecutado el script SQL de la V22?");
+                return;
+            }
+
+            throw error; // Otros errores
+        }
         
-        // Si no hay datos
+        // --- PROCESAMIENTO DE DATOS ---
         if (!data || data.length === 0) {
             document.getElementById('status-text').innerText = "0 resultados";
-            document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos. (Revisa si el scraper corrió hoy)</td></tr>`;
+            document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Consulta exitosa, pero no hay datos hoy.</td></tr>`;
             masterData = [];
             return;
         }
 
-        // ÉXITO
+        // Éxito
+        console.log("✅ Datos recibidos:", data.length);
         masterData = data;
         document.getElementById('col-metric').innerText = metricLabel;
 
-        // Renderizado inicial (sin filtros estrictos para asegurar que se vea algo)
+        // Renderizado inicial robusto
         currentData = [...masterData];
-        doSort(); // Ordenar
+        doSort(); 
         
-        // Aplicar filtro si el usuario ya escribió algo, si no, mostrar todo
+        // Aplicar filtro si ya existía
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) {
             applyFilters();
@@ -96,9 +127,9 @@ async function loadData() {
         }
 
     } catch (err) {
-        console.error("Error en loadData:", err);
-        alert("Error cargando datos: " + err.message);
-        document.getElementById('status-text').innerText = "Error API";
+        console.error("Error General:", err);
+        alert("Error de Conexión: " + err.message);
+        document.getElementById('status-text').innerText = "Error";
     }
 }
 
@@ -106,12 +137,12 @@ async function loadData() {
 function applyFilters() {
     try {
         const input = document.getElementById('filter-min-eur');
-        // Si el input está vacío o es inválido, asumimos 0
         let minEur = (input && input.value) ? parseFloat(input.value) : 0;
         if (isNaN(minEur)) minEur = 0;
 
         currentData = masterData.filter(item => {
-            const price = item.eur ? parseFloat(item.eur) : 0;
+            // Protección contra nulos en el precio
+            const price = (item.eur !== null && item.eur !== undefined) ? parseFloat(item.eur) : 0;
             return price >= minEur;
         });
 
@@ -154,7 +185,7 @@ function renderTable() {
     tbody.innerHTML = '';
     
     if (!currentData || currentData.length === 0) { 
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado.</td></tr>`; 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado. Baja el filtro de precio.</td></tr>`; 
         return; 
     }
 
@@ -229,9 +260,10 @@ function getLinks(item) {
 // --- 5. GRÁFICAS ---
 async function openChart(i) {
     const item = currentData[i];
-    if (!item) return;
-
     const modal = document.getElementById('chart-modal');
+    
+    if (!item) { alert("Error: Elemento no encontrado."); return; }
+
     modal.classList.remove('hidden');
     document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
     
@@ -243,8 +275,15 @@ async function openChart(i) {
             target_set_code: item.set_code 
         });
 
-        if (error || !data || data.length === 0) {
-            alert(error ? "Error SQL: " + error.message : "Sin historial.");
+        if (error) { 
+            console.error(error); 
+            alert("Error SQL: " + error.message); 
+            modal.classList.add('hidden');
+            return; 
+        }
+
+        if (!data || data.length === 0) {
+            alert("No hay historial disponible.");
             modal.classList.add('hidden');
             return;
         }
@@ -314,6 +353,7 @@ function initAutocomplete() {
 
             const uniques = [...new Set(data.map(i => i.name))].slice(0, 8);
             list.innerHTML = '';
+            
             uniques.forEach(name => {
                 const li = document.createElement('li');
                 li.className = 'px-4 py-3 text-sm font-medium hover:bg-indigo-50 cursor-pointer border-b border-slate-50 flex items-center gap-2';
@@ -427,4 +467,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-            }
+    }

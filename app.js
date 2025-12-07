@@ -1,6 +1,9 @@
 let supabase = null;
 let currentMode = 'arbitrage';
-let currentData = [];
+let masterData = []; // Datos originales de la API
+let currentData = []; // Datos filtrados y ordenados (lo que se ve)
+let sortCol = 'ratio'; // Columna por defecto
+let sortAsc = false;   // Dirección por defecto
 let searchTimer = null;
 let chartInstance = null;
 
@@ -29,35 +32,88 @@ window.onload = function() {
 async function loadData() {
     if (currentMode === 'search') return;
 
+    // Resetear UI
     document.getElementById('view-table').classList.remove('hidden');
     document.getElementById('view-search').classList.add('hidden');
-    document.getElementById('status-bar').classList.remove('hidden');
-
+    document.getElementById('toolbar').classList.remove('hidden');
     document.getElementById('status-text').innerText = "Cargando...";
+
     let rpcName, metricLabel;
-    
-    if (currentMode === 'arbitrage') { rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; }
-    else if (currentMode === 'trend') { rpcName = 'get_us_spikes'; metricLabel = 'Subida %'; }
-    else if (currentMode === 'demand') { rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; }
+    // Configuración por defecto según pestaña
+    if (currentMode === 'arbitrage') { 
+        rpcName = 'get_arbitrage_opportunities'; 
+        metricLabel = 'Gap'; 
+        sortCol = 'ratio'; sortAsc = false;
+    } else if (currentMode === 'trend') { 
+        rpcName = 'get_us_spikes'; 
+        metricLabel = 'Subida %'; 
+        sortCol = 'ratio'; sortAsc = false;
+    } else if (currentMode === 'demand') { 
+        rpcName = 'get_demand_spikes'; 
+        metricLabel = 'Demanda 7d'; 
+        sortCol = 'ratio'; sortAsc = false;
+    }
 
     const { data, error } = await supabase.rpc(rpcName);
     if (error) { alert("Error API: " + error.message); return; }
     
-    currentData = data || [];
-    if (currentMode !== 'demand') currentData.sort((a, b) => b.ratio - a.ratio);
+    // GUARDAMOS EN MASTERDATA (La fuente de verdad)
+    masterData = data || [];
     
-    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
     document.getElementById('col-metric').innerText = metricLabel;
+    
+    // Aplicamos filtros y ordenación iniciales
+    applyFilters();
+}
+
+// --- LÓGICA DE FILTRADO Y ORDENACIÓN (NUEVO) ---
+
+function applyFilters() {
+    // 1. Leer valores de los inputs
+    const minEur = parseFloat(document.getElementById('filter-min-eur').value) || 0;
+
+    // 2. Filtrar masterData -> currentData
+    currentData = masterData.filter(item => {
+        if (item.eur < minEur) return false;
+        return true;
+    });
+
+    // 3. Ordenar currentData
+    doSort();
+
+    // 4. Renderizar
+    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
     renderTable();
 }
 
-// --- HELPER LINKS ---
-function getLinks(item) {
-    const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
-    const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
-    const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
-    const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
-    return { mkmLink, ckLink, edhLink };
+function sortBy(column) {
+    // Si pulsamos la misma columna, invertimos el orden
+    if (sortCol === column) {
+        sortAsc = !sortAsc;
+    } else {
+        sortCol = column;
+        sortAsc = false; // Por defecto descendente (mayor a menor)
+    }
+    
+    applyFilters(); // Esto llama a doSort y renderTable
+}
+
+function doSort() {
+    currentData.sort((a, b) => {
+        let valA = a[sortCol];
+        let valB = b[sortCol];
+
+        // Manejo de nulos
+        if (valA == null) valA = 0;
+        if (valB == null) valB = 0;
+
+        // Comparación numérica o texto
+        if (typeof valA === 'string') {
+            return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else {
+            return sortAsc ? valA - valB : valB - valA;
+        }
+    });
 }
 
 // --- RENDER TABLA ---
@@ -65,13 +121,24 @@ function renderTable() {
     const tbody = document.getElementById('table-body');
     tbody.innerHTML = '';
     
-    if (currentData.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos.</td></tr>`; return; }
+    if (currentData.length === 0) { 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Sin datos (revisa los filtros).</td></tr>`; 
+        return; 
+    }
 
     currentData.forEach((item, index) => {
         let val, color;
-        if (currentMode === 'arbitrage') { val = item.ratio.toFixed(2)+'x'; color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; }
-        else if (currentMode === 'trend') { val = '+'+item.ratio.toFixed(0)+'%'; color = 'ratio-high'; }
-        else { val = '+'+Math.round(item.ratio)+'%'; color = 'bg-amber-100 text-amber-800 border border-amber-200'; }
+        // Lógica visual específica por modo
+        if (currentMode === 'arbitrage') { 
+            val = item.ratio.toFixed(2)+'x'; 
+            color = item.ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
+        } else if (currentMode === 'trend') { 
+            val = '+'+item.ratio.toFixed(0)+'%'; 
+            color = 'ratio-high'; 
+        } else { 
+            val = '+'+Math.round(item.ratio)+'%'; 
+            color = 'bg-amber-100 text-amber-800 border border-amber-200'; 
+        }
         
         const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
         const rankChange = item.rank_change || 0;
@@ -117,7 +184,89 @@ function renderTable() {
     });
 }
 
-// --- BÚSQUEDA ---
+function getLinks(item) {
+    const cleanName = item.name.replace(/'/g, '').replace(/\/\/.*/, '');
+    const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
+    const ckLink = `https://www.cardkingdom.com/purchasing/mtg_singles?search=header&filter%5Bname%5D=${encodeURIComponent(item.name)}`;
+    const edhLink = `https://edhrec.com/cards/${cleanName.toLowerCase().replace(/ /g, '-')}`;
+    return { mkmLink, ckLink, edhLink };
+}
+
+// --- GRÁFICAS ---
+async function openChart(i) {
+    const item = currentData[i];
+    const modal = document.getElementById('chart-modal');
+    
+    if (!item) return alert("Error: Elemento no encontrado.");
+
+    modal.classList.remove('hidden');
+    document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
+    
+    if (chartInstance) chartInstance.destroy();
+
+    try {
+        const { data, error } = await supabase.rpc('get_card_history', { 
+            target_card_name: item.name, 
+            target_set_code: item.set_code 
+        });
+
+        if (error || !data || data.length === 0) {
+            alert("Sin historial.");
+            modal.classList.add('hidden');
+            return;
+        }
+
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
+                datasets: [
+                    { label: 'USD', data: data.map(x => x.usd), borderColor: '#3b82f6', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
+                    { label: 'EUR', data: data.map(x => x.eur), borderColor: '#22c55e', tension: 0.2, pointRadius: 2, yAxisID: 'y_price' },
+                    { label: 'Rank', data: data.map(x => x.edhrec_rank), borderColor: '#a855f7', borderDash: [5,5], yAxisID: 'y_rank', hidden: false, borderWidth: 1 }
+                ]
+            },
+            options: { 
+                maintainAspectRatio: false,
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: { 
+                    y_price: { type: 'linear', position: 'right', beginAtZero: false, title: {display: true, text: 'Precio'} },
+                    y_rank: { type: 'linear', position: 'left', reverse: true, grid: { drawOnChartArea: false }, title: {display: true, text: 'Rank #'} }
+                }
+            }
+        });
+
+    } catch (err) {
+        alert("Error JS: " + err.message);
+        modal.classList.add('hidden');
+    }
+}
+
+// --- UTILIDADES ---
+function switchMode(mode) {
+    currentMode = mode;
+    ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
+        const btn = document.getElementById('tab-'+m);
+        btn.className = (m === mode) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
+    });
+
+    if (mode === 'search') {
+        document.getElementById('view-table').classList.add('hidden');
+        document.getElementById('view-search').classList.remove('hidden');
+        document.getElementById('toolbar').classList.add('hidden'); // Ocultar filtros en búsqueda
+        document.getElementById('search-input').focus();
+    } else {
+        document.getElementById('view-table').classList.remove('hidden');
+        document.getElementById('view-search').classList.add('hidden');
+        document.getElementById('toolbar').classList.remove('hidden');
+        document.getElementById('search-input').value = '';
+        loadData();
+    }
+}
+
+// --- BÚSQUEDA Y OTROS HELPERS ---
 function initAutocomplete() {
     const input = document.getElementById('search-input');
     const list = document.getElementById('suggestions-list');
@@ -154,7 +303,6 @@ async function performSearch(name) {
     document.getElementById('suggestions-list').classList.add('hidden');
     document.getElementById('search-input').value = name;
     document.getElementById('search-placeholder').classList.add('hidden');
-    document.getElementById('copy-btn').classList.add('hidden');
     
     const grid = document.getElementById('search-results-grid');
     grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Buscando...</div>';
@@ -168,7 +316,7 @@ async function performSearch(name) {
         return;
     }
 
-    document.getElementById('status-text').innerText = `${currentData.length} versiones`;
+    document.getElementById('status-text').innerText = `${currentData.length} resultados`;
 
     currentData.forEach((item, i) => {
         const card = document.createElement('div');
@@ -189,7 +337,6 @@ async function performSearch(name) {
                         <div class="font-black text-lg leading-tight text-slate-800">${item.name}</div>
                         <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mt-1">${item.set_code}</div>
                     </div>
-                    
                     <div class="grid grid-cols-2 gap-2 my-2">
                         <div class="bg-slate-50 p-2 rounded text-center border">
                             <div class="text-[10px] text-gray-400 uppercase font-bold">EUR</div>
@@ -200,7 +347,6 @@ async function performSearch(name) {
                             <div class="font-bold text-slate-500 text-lg">$${(item.usd||0).toFixed(2)}</div>
                         </div>
                     </div>
-                    
                     <div class="flex justify-between items-center mt-auto border-t border-dashed border-slate-200 pt-2">
                         <div class="flex flex-col">
                             <span class="text-[10px] text-gray-400 uppercase font-bold">Rank</span>
@@ -233,123 +379,6 @@ async function performSearch(name) {
         `;
         grid.appendChild(card);
     });
-}
-
-// --- GRÁFICAS (Escalas Separadas) ---
-async function openChart(i) {
-    const item = currentData[i];
-    const modal = document.getElementById('chart-modal');
-    
-    if (!item) return alert("Error: Elemento no encontrado.");
-
-    modal.classList.remove('hidden');
-    document.getElementById('modal-title').innerText = `${item.name} (${item.set_code})`;
-    
-    if (chartInstance) chartInstance.destroy();
-
-    try {
-        const { data, error } = await supabase.rpc('get_card_history', { 
-            target_card_name: item.name, 
-            target_set_code: item.set_code 
-        });
-
-        if (error) {
-            alert("Error SQL: " + error.message);
-            modal.classList.add('hidden');
-            return;
-        }
-
-        if (!data || data.length === 0) {
-            alert("No hay historial disponible.");
-            modal.classList.add('hidden');
-            return;
-        }
-
-        const ctx = document.getElementById('priceChart').getContext('2d');
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
-                datasets: [
-                    { 
-                        label: 'USD', 
-                        data: data.map(x => x.usd), 
-                        borderColor: '#3b82f6', 
-                        backgroundColor: '#3b82f6',
-                        tension: 0.2, 
-                        pointRadius: 2,
-                        yAxisID: 'y_price' // Eje Derecho
-                    },
-                    { 
-                        label: 'EUR', 
-                        data: data.map(x => x.eur), 
-                        borderColor: '#22c55e', 
-                        backgroundColor: '#22c55e',
-                        tension: 0.2, 
-                        pointRadius: 2,
-                        yAxisID: 'y_price' // Eje Derecho
-                    },
-                    { 
-                        label: 'Rank', 
-                        data: data.map(x => x.edhrec_rank), 
-                        borderColor: '#a855f7', 
-                        backgroundColor: '#a855f7',
-                        borderDash: [5,5], 
-                        hidden: false,
-                        pointRadius: 0,
-                        borderWidth: 1,
-                        yAxisID: 'y_rank' // Eje Izquierdo
-                    }
-                ]
-            },
-            options: { 
-                maintainAspectRatio: false,
-                responsive: true,
-                interaction: { mode: 'index', intersect: false },
-                scales: { 
-                    y_price: { 
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: false, 
-                        title: {display: true, text: 'Precio'}
-                    },
-                    y_rank: {
-                        type: 'linear',
-                        position: 'left',
-                        reverse: true, // Invertir para que Rank 1 esté arriba
-                        grid: { drawOnChartArea: false },
-                        title: {display: true, text: 'Rank #'}
-                    }
-                }
-            }
-        });
-
-    } catch (err) {
-        alert("Error JS: " + err.message);
-        modal.classList.add('hidden');
-    }
-}
-
-// --- UTILIDADES ---
-function switchMode(mode) {
-    currentMode = mode;
-    ['arbitrage', 'trend', 'demand', 'search'].forEach(m => {
-        const btn = document.getElementById('tab-'+m);
-        btn.className = (m === mode) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
-    });
-
-    if (mode === 'search') {
-        document.getElementById('view-table').classList.add('hidden');
-        document.getElementById('view-search').classList.remove('hidden');
-        document.getElementById('status-bar').classList.add('hidden');
-        document.getElementById('search-input').focus();
-    } else {
-        document.getElementById('view-table').classList.remove('hidden');
-        document.getElementById('view-search').classList.add('hidden');
-        document.getElementById('status-bar').classList.remove('hidden');
-        document.getElementById('search-input').value = '';
-        loadData();
-    }
 }
 
 function showImage(url, e) {

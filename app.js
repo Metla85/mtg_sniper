@@ -1,15 +1,15 @@
-console.log("🚀 Iniciando MTG Sniper V39 (Full Graphics Restore)...");
+console.log("🚀 Iniciando MTG Sniper V43 (Top Picks)...");
 
 let supabase = null;
-let currentMode = 'arbitrage';
+let currentMode = 'top'; // AHORA EMPEZAMOS EN TOP PICKS
 let masterData = []; 
 let currentData = []; 
-let sortCol = 'ratio'; 
+let sortCol = 'sniper_score'; // Ordenamos por puntuación
 let sortAsc = false;
 let chartInstance = null;
 let searchTimer = null;
 
-// --- ICONOS SVG (CONSTANTES PARA REUTILIZAR) ---
+// --- ICONS ---
 const ICONS = {
     chart: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>`,
     mkm: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>`,
@@ -53,8 +53,10 @@ async function loadData() {
 
     let rpcName, metricLabel;
     
-    // Configuración de modos
-    if (currentMode === 'arbitrage') { 
+    // --- CONFIGURACIÓN DE MODOS ---
+    if (currentMode === 'top') {
+        rpcName = 'get_sniper_top_picks'; metricLabel = 'Score'; sortCol = 'sniper_score'; sortAsc = false;
+    } else if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
         rpcName = 'get_us_spikes'; metricLabel = 'Subida %'; sortCol = 'ratio'; sortAsc = false;
@@ -71,17 +73,25 @@ async function loadData() {
         
         if (!data || data.length === 0) {
             uiSetText('status-text', "0 resultados");
-            const msg = currentMode === 'radar' ? "Sin datos. Ejecuta el script python." : "Sin datos.";
+            const msg = currentMode === 'radar' 
+                ? "Sin datos. Ejecuta el script 'ingest_moxfield.py'." 
+                : "Sin datos disponibles.";
             uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">${msg}</td></tr>`);
             masterData = [];
             return;
         }
 
+        // ÉXITO: ORDENAMOS POR DEFECTO PARA EL TOP 10
         masterData = data;
         uiSetText('col-metric', metricLabel);
 
         currentData = [...masterData];
-        doSort(); 
+        // Forzamos ordenación por Score en modo TOP
+        if(currentMode === 'top') {
+            currentData.sort((a,b) => b.sniper_score - a.sniper_score);
+        } else {
+            doSort(); 
+        }
         
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) applyFilters();
@@ -91,12 +101,12 @@ async function loadData() {
         }
 
     } catch (err) {
-        console.error(err); alert("Error datos: " + err.message);
+        console.error("Error loadData:", err);
         uiSetText('status-text', "Error API");
     }
 }
 
-// --- 3. FILTROS Y ORDENACIÓN ---
+// --- 3. FILTROS ---
 function applyFilters() {
     const input = document.getElementById('filter-min-eur');
     let minEur = (input && input.value) ? parseFloat(input.value) : 0;
@@ -127,19 +137,27 @@ function doSort() {
     });
 }
 
-// --- 4. RENDERIZADO DE TABLA (V39 - BOTONES RESTAURADOS) ---
+// --- 4. RENDERIZADO ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    if (!currentData.length) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-slate-400 py-8">Vacío.</td></tr>`; return; }
+    if (!currentData.length) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8">Vacío.</td></tr>`; return; }
 
-    currentData.forEach((item, index) => {
+    // En modo TOP, limitamos visualmente a 50 para no saturar, aunque haya más
+    const displayData = currentMode === 'top' ? currentData.slice(0, 50) : currentData;
+
+    displayData.forEach((item, index) => {
         let val, color;
         
-        // Visualización del Valor Principal
-        if (currentMode === 'radar') {
+        // --- LÓGICA DE VALORES ---
+        if (currentMode === 'top') {
+            // MODO TOP: Mostramos el Score
+            val = Math.round(item.sniper_score);
+            // Dorado si > 80, Verde si > 60
+            color = val > 80 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-green-50 text-green-700 border-green-200';
+        } else if (currentMode === 'radar') {
             let pop = parseFloat(item.popularity || 0);
             val = pop.toFixed(1) + '%';
             color = pop > 20 ? 'bg-rose-100 text-rose-800 border-rose-200' : 'bg-blue-50 text-blue-800 border-blue-200';
@@ -154,25 +172,25 @@ function renderTable() {
             }
         }
         
-        // Flecha de Variación
+        // --- FLECHA DE VARIACIÓN ---
         const change = parseFloat(item.rank_change || 0);
         let arrow = '—', arrowClass = 'text-slate-300';
 
         if (currentMode === 'radar') {
             if (change > 0) { arrow = `▲ +${change.toFixed(1)}%`; arrowClass = 'rank-up'; }
             else if (change < 0) { arrow = `▼ ${change.toFixed(1)}%`; arrowClass = 'rank-down'; }
-        } else {
+        } else if (currentMode !== 'top') { // En Top Picks no mostramos flecha de variación compleja
             if (change > 0) { arrow = `▲ ${Math.round(change)}`; arrowClass = 'rank-up'; }
             else if (change < 0) { arrow = `▼ ${Math.abs(Math.round(change))}`; arrowClass = 'rank-down'; }
         }
 
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
-        // Botón Radar (Moxfield) - Solo si aplica
+        // Botón Moxfield (si tiene link)
         let radarBtn = '';
-        if (currentMode === 'radar' && item.example_deck_id) {
+        if (item.example_deck_id) {
             radarBtn = `
-                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo">
+                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Moxfield">
                     ${ICONS.moxfield}
                 </a>`;
         }
@@ -199,15 +217,9 @@ function renderTable() {
                             ${ICONS.chart}
                         </button>
                         ${radarBtn}
-                        <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="CardMarket">
-                            ${ICONS.mkm}
-                        </a>
-                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CardKingdom">
-                            ${ICONS.ck}
-                        </a>
-                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDHRec">
-                            ${ICONS.edh}
-                        </a>
+                        <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">${ICONS.mkm}</a>
+                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">${ICONS.ck}</a>
+                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDH">${ICONS.edh}</a>
                     </div>
                 </td>
             </tr>
@@ -216,7 +228,7 @@ function renderTable() {
     });
 }
 
-// --- 5. GRÁFICAS Y HELPERS ---
+// --- 5. UTILS ---
 function getLinks(item) {
     const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
@@ -281,7 +293,7 @@ function showImage(url) {
 
 function switchMode(mode) {
     currentMode = mode;
-    ['arbitrage', 'trend', 'demand', 'search', 'radar'].forEach(m => {
+    ['top', 'arbitrage', 'trend', 'demand', 'search', 'radar'].forEach(m => {
         const btn = document.getElementById('tab-'+m);
         if (btn) btn.className = (m === mode) ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap' : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap';
     });
@@ -322,7 +334,7 @@ function initAutocomplete() {
     });
 }
 
-// --- 6. BÚSQUEDA (CON BOTONES BONITOS RESTAURADOS) ---
+// --- 6. BÚSQUEDA ---
 async function performSearch(name) {
     uiHide('suggestions-list');
     document.getElementById('search-input').value = name;
@@ -345,7 +357,6 @@ async function performSearch(name) {
         const card = document.createElement('div');
         card.className = "card-sheet bg-white rounded shadow p-4 flex flex-col gap-2";
         
-        // Aquí es donde había el error de los botones "€". Ahora usan los ICONS.
         card.innerHTML = `
             <div class="flex gap-4">
                 <img src="${item.image_uri}" class="w-20 rounded shadow" onclick="showImage('${item.image_uri}')">
@@ -380,4 +391,4 @@ function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt);
     Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast();
-}
+                                                            }

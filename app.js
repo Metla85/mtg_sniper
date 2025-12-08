@@ -1,4 +1,4 @@
-console.log("🚀 Iniciando MTG Sniper V37 (UI Fix)...");
+console.log("🚀 Iniciando MTG Sniper V38 (Full Restore)...");
 
 let supabase = null;
 let currentMode = 'arbitrage';
@@ -9,15 +9,15 @@ let sortAsc = false;
 let chartInstance = null;
 let searchTimer = null;
 
-// --- HELPERS UI ---
+// --- UI HELPERS ---
 function uiSetText(id, text) { const el = document.getElementById(id); if (el) el.innerText = text; }
 function uiSetHTML(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
 function uiShow(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
 function uiHide(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
 
-// --- 1. INICIALIZACIÓN ---
+// --- 1. INICIO ---
 window.onload = function() {
-    if (typeof window.supabase === 'undefined') { alert("Error: Librería Supabase no cargada."); return; }
+    if (typeof window.supabase === 'undefined') { alert("Error crítico: Librería Supabase no cargada."); return; }
 
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
@@ -44,7 +44,6 @@ async function loadData() {
 
     let rpcName, metricLabel;
     
-    // Configuración de modos
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
@@ -62,7 +61,7 @@ async function loadData() {
         
         if (!data || data.length === 0) {
             uiSetText('status-text', "0 resultados");
-            const msg = currentMode === 'radar' ? "Sin datos. Ejecuta el script python." : "Sin datos.";
+            const msg = currentMode === 'radar' ? "Sin datos. Ejecuta el script de Python." : "Sin datos disponibles.";
             uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">${msg}</td></tr>`);
             masterData = [];
             return;
@@ -82,7 +81,7 @@ async function loadData() {
         }
 
     } catch (err) {
-        console.error(err); alert("Error datos: " + err.message);
+        console.error(err); alert("Error cargando datos: " + err.message);
         uiSetText('status-text', "Error API");
     }
 }
@@ -118,7 +117,7 @@ function doSort() {
     });
 }
 
-// --- 4. RENDERIZADO (CORREGIDO) ---
+// --- 4. RENDERIZADO (VERSIÓN COMPLETA) ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     if (!tbody) return;
@@ -160,20 +159,19 @@ function renderTable() {
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
         // Botón Radar (Moxfield)
-        let radarBtn = '';
+        let extraBtn = '';
         if (currentMode === 'radar' && item.example_deck_id) {
-            radarBtn = `
-                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo">
+            extraBtn = `
+                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Moxfield">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
                 </a>`;
         }
 
-        // NOTA: He quitado el onclick="${openChart}" del <tr> para que no salte al tocar la fila
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50">
                 <td class="px-4 py-3 pl-6">
                     <div class="flex items-center gap-3">
-                        <div class="cursor-pointer" onclick="showImage('${item.image_uri}')">
+                        <div class="cursor-pointer" onclick="showImage('${item.image_uri}'); event.stopPropagation();">
                             <img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover shadow-sm" onerror="this.style.display='none'">
                         </div>
                         <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
@@ -185,19 +183,18 @@ function renderTable() {
                 <td class="px-4 py-3 text-center"><span class="${color} ratio-badge">${val}</span></td>
                 <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">#${item.edhrec_rank||'—'}</td>
                 <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
+                
                 <td class="px-4 py-3 text-center">
                     <div class="flex justify-center gap-1">
-                        <button onclick="openChart(${index})" class="icon-btn text-blue-600 hover:bg-blue-50" title="Gráfica">
+                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Gráfica">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
                         
-                        ${radarBtn}
-                        
-                        <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
+                        ${extraBtn} <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                         </a>
                         
-                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">
+                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CardKingdom">
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
                         </a>
                         
@@ -212,7 +209,7 @@ function renderTable() {
     });
 }
 
-// --- 5. FUNCIONALIDADES ---
+// --- 5. GRÁFICAS Y HELPERS ---
 function getLinks(item) {
     const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
@@ -237,8 +234,8 @@ async function openChart(i) {
         });
 
         if (error || !data || data.length === 0) {
-            alert(error ? "Error SQL: " + error.message : "Sin historial.");
             uiHide('chart-modal');
+            alert(error ? "Error SQL: " + error.message : "Sin historial.");
             return;
         }
 
@@ -353,8 +350,9 @@ async function performSearch(name) {
             </div>
             <div class="flex gap-1 mt-2 pt-2 border-t">
                 <button onclick="openChart(${i})" class="flex-1 bg-blue-50 text-blue-600 font-bold py-2 rounded text-xs">Gráfica</button>
-                <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50">M</a>
-                <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 bg-emerald-50">C</a>
+                <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 bg-indigo-50" title="MKM">M</a>
+                <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 bg-emerald-50" title="CK">C</a>
+                <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 bg-purple-50" title="EDH">E</a>
             </div>`;
         grid.appendChild(card);
     });
@@ -370,4 +368,4 @@ function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt);
     Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast();
-            }
+    }

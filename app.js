@@ -225,57 +225,11 @@ function renderTable() {
             }
         }
 
-function renderTable() {
-    const tbody = document.getElementById('table-body');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    
-    if (!currentData || currentData.length === 0) { 
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado.</td></tr>`; 
-        return; 
-    }
-
-    currentData.forEach((item, index) => {
-        let val, color;
-        
-        // LÓGICA VISUAL
-        if (currentMode === 'radar') {
-            let pop = parseFloat(item.popularity || 0);
-            val = pop.toFixed(1) + '%';
-            color = pop > 20 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-blue-50 text-blue-800 border border-blue-200';
-        } else {
-            let ratio = parseFloat(item.ratio || 0);
-            if (currentMode === 'arbitrage') { 
-                val = ratio.toFixed(2)+'x'; 
-                color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
-            } else if (currentMode === 'trend') { 
-                val = '+'+ratio.toFixed(0)+'%'; 
-                color = 'ratio-high'; 
-            } else { 
-                val = '+'+Math.round(ratio)+'%'; 
-                color = 'bg-amber-100 text-amber-800 border border-amber-200'; 
-            }
-        }
-        
-        const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
-        const change = parseFloat(item.rank_change || 0);
-        let arrow = '—';
-        let arrowClass = 'text-slate-300';
-
-        if (currentMode === 'radar') {
-            if (change > 0) { arrow = `▲ +${change.toFixed(1)}%`; arrowClass = 'rank-up'; } 
-            else if (change < 0) { arrow = `▼ ${change.toFixed(1)}%`; arrowClass = 'rank-down'; }
-            else { arrow = '='; }
-        } else {
-            if (change > 0) { arrow = `▲ ${Math.round(change)}`; arrowClass = 'rank-up'; }
-            else if (change < 0) { arrow = `▼ ${Math.abs(Math.round(change))}`; arrowClass = 'rank-down'; }
-        }
-
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
-        // --- BOTÓN EXTRA PARA RADAR (Moxfield) ---
+        // --- C. BOTÓN EXTRA PARA RADAR (Moxfield) ---
         let extraBtn = '';
+        // Solo mostramos el botón si estamos en Radar Y tenemos el ID del mazo
         if (currentMode === 'radar' && item.example_deck_id) {
             extraBtn = `
                 <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo en Moxfield">
@@ -319,7 +273,6 @@ function renderTable() {
         tbody.insertAdjacentHTML('beforeend', row);
     });
 }
-        
 
 // --- 5. GRÁFICAS Y HELPERS ---
 function getLinks(item) {
@@ -534,4 +487,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-}
+                                }

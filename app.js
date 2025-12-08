@@ -1,4 +1,4 @@
-console.log("🚀 Iniciando MTG Sniper V36 (Restauración UI)...");
+console.log("🚀 Iniciando MTG Sniper V37 (UI Fix)...");
 
 let supabase = null;
 let currentMode = 'arbitrage';
@@ -15,7 +15,7 @@ function uiSetHTML(id, html) { const el = document.getElementById(id); if (el) e
 function uiShow(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
 function uiHide(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
 
-// --- 1. INICIO ---
+// --- 1. INICIALIZACIÓN ---
 window.onload = function() {
     if (typeof window.supabase === 'undefined') { alert("Error: Librería Supabase no cargada."); return; }
 
@@ -44,6 +44,7 @@ async function loadData() {
 
     let rpcName, metricLabel;
     
+    // Configuración de modos
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'trend') { 
@@ -117,7 +118,7 @@ function doSort() {
     });
 }
 
-// --- 4. RENDERIZADO (RESTAURADO) ---
+// --- 4. RENDERIZADO (CORREGIDO) ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     if (!tbody) return;
@@ -162,11 +163,12 @@ function renderTable() {
         let radarBtn = '';
         if (currentMode === 'radar' && item.example_deck_id) {
             radarBtn = `
-                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Moxfield">
+                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
                 </a>`;
         }
 
+        // NOTA: He quitado el onclick="${openChart}" del <tr> para que no salte al tocar la fila
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50">
                 <td class="px-4 py-3 pl-6">
@@ -180,21 +182,25 @@ function renderTable() {
                 <td class="px-2 py-3 text-center"><span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">${item.set_code || '??'}</span></td>
                 <td class="px-4 py-3 text-right font-mono font-bold text-slate-700">${(item.eur||0).toFixed(2)}€</td>
                 <td class="hide-mobile px-4 py-3 text-right font-mono text-slate-400">$${(item.usd||0).toFixed(2)}</td>
-                <td class="px-4 py-3 text-center"><span class="ratio-badge ${color} border">${val}</span></td>
+                <td class="px-4 py-3 text-center"><span class="${color} ratio-badge">${val}</span></td>
                 <td class="px-4 py-3 text-center text-xs font-mono text-slate-600">#${item.edhrec_rank||'—'}</td>
                 <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
                 <td class="px-4 py-3 text-center">
-                    <div class="icon-group flex justify-center gap-1">
+                    <div class="flex justify-center gap-1">
                         <button onclick="openChart(${index})" class="icon-btn text-blue-600 hover:bg-blue-50" title="Gráfica">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
+                        
                         ${radarBtn}
+                        
                         <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                         </a>
-                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CardKingdom">
+                        
+                        <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
                         </a>
+                        
                         <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDHRec">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                         </a>
@@ -217,15 +223,12 @@ function getLinks(item) {
 
 async function openChart(i) {
     const item = currentData[i];
-    if (!item) { alert("Error: Ítem no encontrado."); return; }
+    if (!item) { alert("Error: Elemento no encontrado."); return; }
 
     uiShow('chart-modal');
     uiSetText('modal-title', `${item.name} (${item.set_code})`);
     
-    if (chartInstance) {
-        chartInstance.destroy();
-        chartInstance = null; // Limpieza explicita
-    }
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
     try {
         const { data, error } = await supabase.rpc('get_card_history', { 
@@ -330,6 +333,8 @@ async function performSearch(name) {
 
     if (!data.length) { grid.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">No encontrado.</div>'; return; }
 
+    uiSetText('status-text', `${currentData.length} resultados`);
+
     currentData.forEach((item, i) => {
         const { mkmLink, ckLink, edhLink } = getLinks(item);
         const card = document.createElement('div');
@@ -365,4 +370,4 @@ function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt);
     Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast();
-                        }
+            }

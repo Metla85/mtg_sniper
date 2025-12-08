@@ -1,7 +1,7 @@
 let supabase = null;
 let currentMode = 'arbitrage';
 let masterData = []; // Datos originales (Fuente de verdad)
-let currentData = []; // Datos que se ven en pantalla
+let currentData = []; // Datos que se ven en pantalla (filtrados)
 let sortCol = 'ratio'; 
 let sortAsc = false;
 let chartInstance = null;
@@ -31,7 +31,7 @@ function uiHide(id) {
 // --- 1. INICIALIZACIÓN ---
 window.onload = function() {
     if (typeof window.supabase === 'undefined') {
-        alert("Error crítico: Librería Supabase no cargada."); return;
+        alert("Error crítico: Librería Supabase no cargada. Revisa tu conexión."); return;
     }
 
     const url = localStorage.getItem('supabase_url');
@@ -68,12 +68,8 @@ async function loadData() {
     uiSetText('status-text', "Cargando...");
     uiSetHTML('table-body', '');
 
-    let rpcName = null;     // Inicializamos a null
-    let metricLabel = '';
+    let rpcName, metricLabel;
     
-    // DEBUG: Ver qué modo está intentando cargar
-    console.log("Modo actual:", currentMode);
-
     // CONFIGURACIÓN DE MODOS
     if (currentMode === 'arbitrage') { 
         rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
@@ -83,29 +79,19 @@ async function loadData() {
         rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; sortCol = 'ratio'; sortAsc = false;
     } else if (currentMode === 'radar') {
         rpcName = 'get_modern_radar'; metricLabel = '% Uso'; sortCol = 'popularity'; sortAsc = false;
-    } else {
-        // SEGURIDAD: Si el modo no existe, forzamos Arbitraje
-        console.warn("Modo desconocido:", currentMode, "-> Forzando Arbitraje");
-        currentMode = 'arbitrage';
-        rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap';
-    }
-
-    // SI AÚN ASÍ ES NULL (Doble seguridad)
-    if (!rpcName) {
-        alert("Error interno: No se ha seleccionado ninguna función SQL.");
-        return;
     }
 
     try {
-        console.log(`📡 Llamando a Supabase RPC: ${rpcName}`);
-        
         const { data, error } = await supabase.rpc(rpcName);
         
         if (error) { throw error; }
         
         if (!data || data.length === 0) {
             uiSetText('status-text', "0 resultados");
-            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">Consulta exitosa, pero sin datos.</td></tr>`);
+            const msg = currentMode === 'radar' 
+                ? "Sin datos. Ejecuta el script 'ingest_moxfield.py' para llenar la tabla." 
+                : "Sin datos disponibles.";
+            uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">${msg}</td></tr>`);
             masterData = [];
             return;
         }
@@ -114,10 +100,11 @@ async function loadData() {
         masterData = data;
         uiSetText('col-metric', metricLabel);
 
-        // Renderizado
+        // Renderizado inicial
         currentData = [...masterData];
         doSort(); 
         
+        // Aplicar filtro si existe valor en el input
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) {
             applyFilters();
@@ -128,16 +115,10 @@ async function loadData() {
 
     } catch (err) {
         console.error("Error loadData:", err);
-        // Filtramos el mensaje de error para que sea legible
-        let msg = err.message;
-        if (msg.includes("function") && msg.includes("does not exist")) {
-            msg = "Falta ejecutar el Script SQL en Supabase (función no encontrada).";
-        }
-        alert("Error cargando datos: " + msg);
+        alert("Error cargando datos: " + err.message);
         uiSetText('status-text', "Error API");
     }
 }
-
 
 // --- 3. FILTROS Y ORDENACIÓN ---
 function applyFilters() {
@@ -194,18 +175,15 @@ function renderTable() {
     currentData.forEach((item, index) => {
         let val, color;
         
-        // LÓGICA VISUAL SEGÚN MODO
+        // A. LÓGICA DE VALOR PRINCIPAL (% o Gap)
         if (currentMode === 'radar') {
-            // Radar usa 'popularity', no 'ratio'
             let pop = parseFloat(item.popularity || 0);
             val = pop.toFixed(1) + '%';
-            // Rojo si aparece en >20% de mazos, Azul si es normal
+            // Destacar si se usa en más del 20% de mazos
             color = pop > 20 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-blue-50 text-blue-800 border border-blue-200';
         } 
         else {
-            // Modos normales usan 'ratio'
             let ratio = parseFloat(item.ratio || 0);
-            
             if (currentMode === 'arbitrage') { 
                 val = ratio.toFixed(2)+'x'; 
                 color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
@@ -219,9 +197,33 @@ function renderTable() {
         }
         
         const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
-        const change = item.rank_change || 0;
-        let arrow = change > 0 ? `▲ ${change}` : (change < 0 ? `▼ ${Math.abs(change)}` : '—');
-        let arrowClass = change > 0 ? 'rank-up' : (change < 0 ? 'rank-down' : 'text-slate-300');
+        
+        // B. LÓGICA DE VARIACIÓN (Columna Var)
+        const change = parseFloat(item.rank_change || 0);
+        let arrow = '—';
+        let arrowClass = 'text-slate-300';
+
+        if (currentMode === 'radar') {
+            // MODO RADAR: Mostrar decimales con % (Ej: +2.5%)
+            if (change > 0) { 
+                arrow = `▲ +${change.toFixed(1)}%`; 
+                arrowClass = 'rank-up'; 
+            } else if (change < 0) { 
+                arrow = `▼ ${change.toFixed(1)}%`; 
+                arrowClass = 'rank-down'; 
+            } else {
+                arrow = '=';
+            }
+        } else {
+            // OTROS MODOS: Enteros (Ej: +100)
+            if (change > 0) { 
+                arrow = `▲ ${Math.round(change)}`; 
+                arrowClass = 'rank-up'; 
+            } else if (change < 0) { 
+                arrow = `▼ ${Math.abs(Math.round(change))}`; 
+                arrowClass = 'rank-down'; 
+            }
+        }
 
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
@@ -263,7 +265,7 @@ function renderTable() {
     });
 }
 
-// --- 5. GRÁFICAS ---
+// --- 5. GRÁFICAS Y HELPERS ---
 function getLinks(item) {
     const cleanName = item.name ? item.name.replace(/'/g, '').replace(/\/\/.*/, '') : 'card';
     const mkmLink = item.mkm_link || `https://www.cardmarket.com/en/Magic/Cards/${cleanName.replace(/ /g, '-')}`;
@@ -320,7 +322,8 @@ async function openChart(i) {
         uiHide('chart-modal');
         alert("Error gráfica: " + err.message);
     }
-        }
+}
+
 // --- 6. UTILIDADES ---
 function switchMode(mode) {
     currentMode = mode;

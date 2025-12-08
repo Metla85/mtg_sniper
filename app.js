@@ -225,7 +225,65 @@ function renderTable() {
             }
         }
 
+function renderTable() {
+    const tbody = document.getElementById('table-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (!currentData || currentData.length === 0) { 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400">Todo filtrado.</td></tr>`; 
+        return; 
+    }
+
+    currentData.forEach((item, index) => {
+        let val, color;
+        
+        // LÓGICA VISUAL
+        if (currentMode === 'radar') {
+            let pop = parseFloat(item.popularity || 0);
+            val = pop.toFixed(1) + '%';
+            color = pop > 20 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-blue-50 text-blue-800 border border-blue-200';
+        } else {
+            let ratio = parseFloat(item.ratio || 0);
+            if (currentMode === 'arbitrage') { 
+                val = ratio.toFixed(2)+'x'; 
+                color = ratio > 2 ? 'ratio-extreme' : 'ratio-high'; 
+            } else if (currentMode === 'trend') { 
+                val = '+'+ratio.toFixed(0)+'%'; 
+                color = 'ratio-high'; 
+            } else { 
+                val = '+'+Math.round(ratio)+'%'; 
+                color = 'bg-amber-100 text-amber-800 border border-amber-200'; 
+            }
+        }
+        
+        const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
+        const change = parseFloat(item.rank_change || 0);
+        let arrow = '—';
+        let arrowClass = 'text-slate-300';
+
+        if (currentMode === 'radar') {
+            if (change > 0) { arrow = `▲ +${change.toFixed(1)}%`; arrowClass = 'rank-up'; } 
+            else if (change < 0) { arrow = `▼ ${change.toFixed(1)}%`; arrowClass = 'rank-down'; }
+            else { arrow = '='; }
+        } else {
+            if (change > 0) { arrow = `▲ ${Math.round(change)}`; arrowClass = 'rank-up'; }
+            else if (change < 0) { arrow = `▼ ${Math.abs(Math.round(change))}`; arrowClass = 'rank-down'; }
+        }
+
         const { mkmLink, ckLink, edhLink } = getLinks(item);
+
+        // --- BOTÓN EXTRA PARA RADAR (Moxfield) ---
+        let extraBtn = '';
+        if (currentMode === 'radar' && item.example_deck_id) {
+            extraBtn = `
+                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo en Moxfield">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                </a>
+            `;
+        }
+        // -----------------------------------------
 
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50 transition-colors">
@@ -248,14 +306,11 @@ function renderTable() {
                         <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
-                        <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
+                        ${extraBtn} <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                         </a>
                         <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">
                             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z"/></svg>
-                        </a>
-                        <a href="${edhLink}" target="_blank" class="icon-btn text-purple-600 hover:bg-purple-50" title="EDHRec">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                         </a>
                     </div>
                 </td>
@@ -264,6 +319,7 @@ function renderTable() {
         tbody.insertAdjacentHTML('beforeend', row);
     });
 }
+        
 
 // --- 5. GRÁFICAS Y HELPERS ---
 function getLinks(item) {

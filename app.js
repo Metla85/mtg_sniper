@@ -1,15 +1,15 @@
-console.log("🚀 Iniciando MTG Sniper V43 (Top Picks)...");
+console.log("🚀 Iniciando MTG Sniper V44 (Fix Undefined)...");
 
 let supabase = null;
-let currentMode = 'top'; // AHORA EMPEZAMOS EN TOP PICKS
+let currentMode = 'top'; // Modo por defecto
 let masterData = []; 
 let currentData = []; 
-let sortCol = 'sniper_score'; // Ordenamos por puntuación
+let sortCol = 'sniper_score'; 
 let sortAsc = false;
 let chartInstance = null;
 let searchTimer = null;
 
-// --- ICONS ---
+// --- CONSTANTES VISUALES ---
 const ICONS = {
     chart: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>`,
     mkm: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>`,
@@ -24,7 +24,7 @@ function uiSetHTML(id, html) { const el = document.getElementById(id); if (el) e
 function uiShow(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
 function uiHide(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
 
-// --- 1. INICIO ---
+// --- 1. INICIALIZACIÓN ---
 window.onload = function() {
     if (typeof window.supabase === 'undefined') { alert("Error crítico: Librería Supabase no cargada."); return; }
 
@@ -51,19 +51,41 @@ async function loadData() {
     uiSetText('status-text', "Cargando...");
     uiSetHTML('table-body', '');
 
-    let rpcName, metricLabel;
+    let rpcName = null; // Inicializamos a null para detectar errores
+    let metricLabel = '';
     
-    // --- CONFIGURACIÓN DE MODOS ---
+    // --- MAPEO DE MODOS A FUNCIONES SQL ---
     if (currentMode === 'top') {
-        rpcName = 'get_sniper_top_picks'; metricLabel = 'Score'; sortCol = 'sniper_score'; sortAsc = false;
+        rpcName = 'get_sniper_top_picks'; 
+        metricLabel = 'Score'; 
+        sortCol = 'sniper_score'; 
+        sortAsc = false;
     } else if (currentMode === 'arbitrage') { 
-        rpcName = 'get_arbitrage_opportunities'; metricLabel = 'Gap'; sortCol = 'ratio'; sortAsc = false;
+        rpcName = 'get_arbitrage_opportunities'; 
+        metricLabel = 'Gap'; 
+        sortCol = 'ratio'; 
+        sortAsc = false;
     } else if (currentMode === 'trend') { 
-        rpcName = 'get_us_spikes'; metricLabel = 'Subida %'; sortCol = 'ratio'; sortAsc = false;
+        rpcName = 'get_us_spikes'; 
+        metricLabel = 'Subida %'; 
+        sortCol = 'ratio'; 
+        sortAsc = false;
     } else if (currentMode === 'demand') { 
-        rpcName = 'get_demand_spikes'; metricLabel = 'Demanda 7d'; sortCol = 'ratio'; sortAsc = false;
+        rpcName = 'get_demand_spikes'; 
+        metricLabel = 'Demanda 7d'; 
+        sortCol = 'ratio'; 
+        sortAsc = false;
     } else if (currentMode === 'radar') {
-        rpcName = 'get_modern_radar'; metricLabel = '% Uso'; sortCol = 'popularity'; sortAsc = false;
+        rpcName = 'get_modern_radar'; 
+        metricLabel = '% Uso'; 
+        sortCol = 'popularity'; 
+        sortAsc = false;
+    }
+
+    // SEGURIDAD: Si no hay función asignada, paramos antes de llamar a Supabase
+    if (!rpcName) {
+        alert("Error Interno: Modo desconocido '" + currentMode + "'.");
+        return;
     }
 
     try {
@@ -81,12 +103,12 @@ async function loadData() {
             return;
         }
 
-        // ÉXITO: ORDENAMOS POR DEFECTO PARA EL TOP 10
         masterData = data;
         uiSetText('col-metric', metricLabel);
 
         currentData = [...masterData];
-        // Forzamos ordenación por Score en modo TOP
+        
+        // Ordenación inicial forzada para Top Picks
         if(currentMode === 'top') {
             currentData.sort((a,b) => b.sniper_score - a.sniper_score);
         } else {
@@ -102,6 +124,12 @@ async function loadData() {
 
     } catch (err) {
         console.error("Error loadData:", err);
+        // Filtramos el error "function does not exist" para dar un mensaje útil
+        if (err.message.includes("function") && err.message.includes("does not exist")) {
+            alert("Error: Falta ejecutar el script SQL 'get_sniper_top_picks' en Supabase.");
+        } else {
+            alert("Error cargando datos: " + err.message);
+        }
         uiSetText('status-text', "Error API");
     }
 }
@@ -145,17 +173,14 @@ function renderTable() {
     
     if (!currentData.length) { tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8">Vacío.</td></tr>`; return; }
 
-    // En modo TOP, limitamos visualmente a 50 para no saturar, aunque haya más
     const displayData = currentMode === 'top' ? currentData.slice(0, 50) : currentData;
 
     displayData.forEach((item, index) => {
         let val, color;
         
-        // --- LÓGICA DE VALORES ---
+        // Lógica de Valor Principal
         if (currentMode === 'top') {
-            // MODO TOP: Mostramos el Score
             val = Math.round(item.sniper_score);
-            // Dorado si > 80, Verde si > 60
             color = val > 80 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-green-50 text-green-700 border-green-200';
         } else if (currentMode === 'radar') {
             let pop = parseFloat(item.popularity || 0);
@@ -172,21 +197,20 @@ function renderTable() {
             }
         }
         
-        // --- FLECHA DE VARIACIÓN ---
+        // Lógica de Flecha
         const change = parseFloat(item.rank_change || 0);
         let arrow = '—', arrowClass = 'text-slate-300';
 
         if (currentMode === 'radar') {
             if (change > 0) { arrow = `▲ +${change.toFixed(1)}%`; arrowClass = 'rank-up'; }
             else if (change < 0) { arrow = `▼ ${change.toFixed(1)}%`; arrowClass = 'rank-down'; }
-        } else if (currentMode !== 'top') { // En Top Picks no mostramos flecha de variación compleja
+        } else if (currentMode !== 'top') {
             if (change > 0) { arrow = `▲ ${Math.round(change)}`; arrowClass = 'rank-up'; }
             else if (change < 0) { arrow = `▼ ${Math.abs(Math.round(change))}`; arrowClass = 'rank-down'; }
         }
 
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
-        // Botón Moxfield (si tiene link)
         let radarBtn = '';
         if (item.example_deck_id) {
             radarBtn = `
@@ -213,9 +237,7 @@ function renderTable() {
                 <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="flex justify-center gap-1">
-                        <button onclick="openChart(${index})" class="icon-btn text-blue-600 hover:bg-blue-50" title="Historial">
-                            ${ICONS.chart}
-                        </button>
+                        <button onclick="openChart(${index})" class="icon-btn text-blue-600 hover:bg-blue-50" title="Historial">${ICONS.chart}</button>
                         ${radarBtn}
                         <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">${ICONS.mkm}</a>
                         <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">${ICONS.ck}</a>
@@ -239,7 +261,7 @@ function getLinks(item) {
 
 async function openChart(i) {
     const item = currentData[i];
-    if (!item) { alert("Error: Elemento no encontrado."); return; }
+    if (!item) return;
 
     uiShow('chart-modal');
     uiSetText('modal-title', `${item.name} (${item.set_code})`);
@@ -391,4 +413,4 @@ function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt);
     Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast();
-                                                            }
+            }

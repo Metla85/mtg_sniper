@@ -1,13 +1,15 @@
+console.log("🚀 Iniciando MTG Sniper V34...");
+
 let supabase = null;
 let currentMode = 'arbitrage';
-let masterData = []; // Datos originales (Fuente de verdad)
-let currentData = []; // Datos que se ven en pantalla (filtrados)
+let masterData = []; 
+let currentData = []; 
 let sortCol = 'ratio'; 
 let sortAsc = false;
 let chartInstance = null;
 let searchTimer = null;
 
-// --- HELPERS SEGUROS PARA UI (Evita el crash "cannot set properties of null") ---
+// --- HELPERS SEGUROS (Evitan errores si el HTML no carga bien) ---
 function uiSetText(id, text) {
     const el = document.getElementById(id);
     if (el) el.innerText = text;
@@ -30,21 +32,27 @@ function uiHide(id) {
 
 // --- 1. INICIALIZACIÓN ---
 window.onload = function() {
+    console.log("📱 Window Loaded. Comprobando librerías...");
+
     if (typeof window.supabase === 'undefined') {
-        alert("Error crítico: Librería Supabase no cargada. Revisa tu conexión."); return;
+        alert("Error crítico: La librería de Supabase no se ha cargado. Revisa tu conexión a internet.");
+        return;
     }
 
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
 
     if (!url || !key) {
+        console.log("🔒 No hay credenciales. Mostrando Login.");
         uiShow('config-screen');
         uiHide('main-screen');
         return;
     }
 
     try {
+        console.log("🔌 Conectando a Supabase...");
         supabase = window.supabase.createClient(url, key);
+        
         uiHide('config-screen');
         uiShow('main-screen');
         
@@ -52,7 +60,7 @@ window.onload = function() {
         loadData(); 
 
     } catch (e) {
-        console.error(e);
+        console.error("❌ Error Fatal en inicio:", e);
         alert("Error iniciando app: " + e.message);
     }
 };
@@ -82,14 +90,16 @@ async function loadData() {
     }
 
     try {
+        console.log(`📡 Pidiendo datos: ${rpcName}`);
         const { data, error } = await supabase.rpc(rpcName);
         
-        if (error) { throw error; }
+        if (error) throw error;
         
         if (!data || data.length === 0) {
+            console.warn("⚠️ Datos vacíos recibidos.");
             uiSetText('status-text', "0 resultados");
             const msg = currentMode === 'radar' 
-                ? "Sin datos. Ejecuta el script 'ingest_moxfield.py' para llenar la tabla." 
+                ? "Sin datos. Ejecuta el script 'ingest_moxfield.py' primero." 
                 : "Sin datos disponibles.";
             uiSetHTML('table-body', `<tr><td colspan="8" class="text-center py-8 text-slate-400">${msg}</td></tr>`);
             masterData = [];
@@ -97,6 +107,7 @@ async function loadData() {
         }
 
         // ÉXITO
+        console.log(`✅ Recibidos ${data.length} registros.`);
         masterData = data;
         uiSetText('col-metric', metricLabel);
 
@@ -175,14 +186,12 @@ function renderTable() {
     currentData.forEach((item, index) => {
         let val, color;
         
-        // A. LÓGICA DE VALOR PRINCIPAL (% o Gap)
+        // A. LÓGICA DE VALOR PRINCIPAL
         if (currentMode === 'radar') {
             let pop = parseFloat(item.popularity || 0);
             val = pop.toFixed(1) + '%';
-            // Destacar si se usa en más del 20% de mazos
             color = pop > 20 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-blue-50 text-blue-800 border border-blue-200';
-        } 
-        else {
+        } else {
             let ratio = parseFloat(item.ratio || 0);
             if (currentMode === 'arbitrage') { 
                 val = ratio.toFixed(2)+'x'; 
@@ -198,13 +207,12 @@ function renderTable() {
         
         const rankInfo = item.edhrec_rank ? `#${item.edhrec_rank}` : '—';
         
-        // B. LÓGICA DE VARIACIÓN (Columna Var)
+        // B. LÓGICA DE VARIACIÓN
         const change = parseFloat(item.rank_change || 0);
         let arrow = '—';
         let arrowClass = 'text-slate-300';
 
         if (currentMode === 'radar') {
-            // MODO RADAR: Mostrar decimales con % (Ej: +2.5%)
             if (change > 0) { 
                 arrow = `▲ +${change.toFixed(1)}%`; 
                 arrowClass = 'rank-up'; 
@@ -215,7 +223,6 @@ function renderTable() {
                 arrow = '=';
             }
         } else {
-            // OTROS MODOS: Enteros (Ej: +100)
             if (change > 0) { 
                 arrow = `▲ ${Math.round(change)}`; 
                 arrowClass = 'rank-up'; 
@@ -227,17 +234,15 @@ function renderTable() {
 
         const { mkmLink, ckLink, edhLink } = getLinks(item);
 
-        // --- C. BOTÓN EXTRA PARA RADAR (Moxfield) ---
+        // C. BOTÓN EXTRA PARA RADAR
         let extraBtn = '';
-        // Solo mostramos el botón si estamos en Radar Y tenemos el ID del mazo
         if (currentMode === 'radar' && item.example_deck_id) {
             extraBtn = `
-                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo en Moxfield">
+                <a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50" title="Ver Mazo">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
                 </a>
             `;
         }
-        // -----------------------------------------
 
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50 transition-colors">
@@ -257,10 +262,11 @@ function renderTable() {
                 <td class="px-4 py-3 text-center text-xs font-bold ${arrowClass}">${arrow}</td>
                 <td class="px-4 py-3 text-center">
                     <div class="icon-group flex justify-center gap-1">
-                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Ver Gráfica">
+                        <button onclick="openChart(${index}); event.stopPropagation();" class="icon-btn text-blue-600 hover:bg-blue-50" title="Gráfica">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>
                         </button>
-                        ${extraBtn} <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
+                        ${extraBtn}
+                        <a href="${mkmLink}" target="_blank" class="icon-btn text-indigo-600 hover:bg-indigo-50" title="MKM">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                         </a>
                         <a href="${ckLink}" target="_blank" class="icon-btn text-emerald-600 hover:bg-emerald-50" title="CK">
@@ -285,7 +291,7 @@ function getLinks(item) {
 
 async function openChart(i) {
     const item = currentData[i];
-    if (!item) { alert("Error: Elemento no encontrado."); return; }
+    if (!item) { alert("Error: Ítem no encontrado."); return; }
 
     const modal = document.getElementById('chart-modal');
     uiShow('chart-modal');
@@ -487,4 +493,4 @@ function resetConfig() { if(confirm("¿Borrar configuración?")) { localStorage.
 function copyToClipboardSafe() {
     const txt = currentData.map(i => `1 ${i.name.split(' // ')[0]}`).join('\n');
     navigator.clipboard.writeText(txt).then(() => Toastify({text: "Copiado", duration: 2000, style:{background:"#4f46e5"}}).showToast());
-                                }
+}

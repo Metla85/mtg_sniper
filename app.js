@@ -274,6 +274,23 @@ function getLinks(item) {
     return { mkmLink, ckLink, edhLink };
 }
 
+function showImage(url) {
+    console.log("📸 Intentando abrir imagen:", url);
+    
+    if (!url || url === 'null' || url === 'undefined') {
+        alert("Esta carta no tiene imagen disponible.");
+        return;
+    }
+
+    const img = document.getElementById('enlarged-image');
+    if (img) {
+        img.src = url;
+        uiShow('image-modal');
+    } else {
+        console.error("❌ Error: No se encuentra el elemento HTML 'enlarged-image'");
+    }
+}
+
 async function openChart(i) {
     const item = currentData[i];
     if (!item) return;

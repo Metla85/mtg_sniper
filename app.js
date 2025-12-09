@@ -281,52 +281,43 @@ async function openChart(i) {
             data: {
                 labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
                 datasets: [
-                    // 1. PRECIO USD
+                    // 1. PRECIO USD (Azul)
                     { 
                         label: 'USD', 
                         data: data.map(x => x.usd), 
-                        borderColor: '#3b82f6', // Azul
-                        backgroundColor: '#3b82f6',
-                        tension: 0.2, 
-                        pointRadius: 2, 
-                        yAxisID: 'y_price',
-                        order: 2 
+                        borderColor: '#3b82f6', backgroundColor: '#3b82f6',
+                        tension: 0.2, pointRadius: 2, borderWidth: 2,
+                        yAxisID: 'y_price', order: 2 
                     },
-                    // 2. PRECIO EUR
+                    // 2. PRECIO EUR (Verde)
                     { 
                         label: 'EUR', 
                         data: data.map(x => x.eur), 
-                        borderColor: '#22c55e', // Verde
-                        backgroundColor: '#22c55e',
-                        tension: 0.2, 
-                        pointRadius: 2, 
-                        yAxisID: 'y_price',
-                        order: 1 
+                        borderColor: '#22c55e', backgroundColor: '#22c55e',
+                        tension: 0.2, pointRadius: 2, borderWidth: 2,
+                        yAxisID: 'y_price', order: 1 
                     },
-                    // 3. RANKING EDH (Línea Punteada)
+                    // 3. RANKING EDH (Morado Punteado)
                     { 
                         label: 'EDH Rank', 
                         data: data.map(x => x.edhrec_rank), 
-                        borderColor: '#a855f7', // Morado
-                        borderDash: [5, 5],     // Punteado
-                        pointRadius: 0, 
-                        borderWidth: 1,
+                        borderColor: '#a855f7', 
+                        borderDash: [5, 5],     
+                        pointRadius: 0, borderWidth: 1,
                         yAxisID: 'y_rank',
-                        hidden: true, // Oculto por defecto para no ensuciar
+                        hidden: false, // <--- CAMBIO AQUÍ: AHORA ES VISIBLE
                         order: 3
                     },
-                    // 4. MODERN POPULARITY (Nueva Área Naranja)
+                    // 4. MODERN POPULARITY (Naranja Relleno)
                     { 
                         label: 'Modern %', 
                         data: data.map(x => x.modern_popularity), 
-                        borderColor: '#f97316', // Naranja
-                        backgroundColor: 'rgba(249, 115, 22, 0.1)', // Relleno suave
-                        fill: true, // Relleno activado
-                        tension: 0.4, 
-                        pointRadius: 3, 
-                        borderWidth: 2,
+                        borderColor: '#f97316', 
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)', 
+                        fill: true, 
+                        tension: 0.4, pointRadius: 0, borderWidth: 0, // Sin borde para que sea sutil
                         yAxisID: 'y_modern',
-                        order: 0 
+                        order: 4 // Al fondo
                     }
                 ]
             },
@@ -335,32 +326,27 @@ async function openChart(i) {
                 responsive: true,
                 interaction: { mode: 'index', intersect: false },
                 scales: { 
-                    x: {
-                        grid: { display: false }
-                    },
-                    // EJE IZQUIERDO: Rango EDH (Invertido)
-                    y_rank: { 
-                        type: 'linear', 
-                        position: 'left', 
-                        reverse: true, 
-                        display: false, // Ocultamos el eje para limpiar visualmente (el dato sale al pasar ratón)
-                    },
-                    // EJE DERECHO 1: Precio
+                    x: { grid: { display: false } },
+                    
+                    // Eje Precios (Derecha)
                     y_price: { 
-                        type: 'linear', 
-                        position: 'right', 
-                        beginAtZero: false,
-                        title: { display: true, text: 'Precio (€/$)' },
+                        type: 'linear', position: 'right', beginAtZero: false,
+                        title: { display: true, text: 'Precio' },
                         grid: { color: '#f3f4f6' }
                     },
-                    // EJE DERECHO 2: Modern % (Sin Grid para no molestar)
+                    
+                    // Eje Modern % (Derecha - Invisible pero escala el área naranja)
                     y_modern: {
-                        type: 'linear',
-                        position: 'right',
-                        beginAtZero: true,
-                        suggestedMax: 50, // Escala hasta 50% para que no aplaste los precios
-                        grid: { display: false }, // Sin líneas horizontales
-                        display: false // Eje invisible, solo se ve la línea
+                        type: 'linear', position: 'right', beginAtZero: true,
+                        suggestedMax: 50, 
+                        display: false 
+                    },
+
+                    // Eje Rank EDH (Izquierda - Invertido: cuanto menos mejor)
+                    y_rank: { 
+                        type: 'linear', position: 'left', reverse: true, 
+                        grid: { display: false },
+                        title: { display: true, text: 'Rank #' }
                     }
                 },
                 plugins: {
@@ -370,7 +356,7 @@ async function openChart(i) {
                                 let label = context.dataset.label || '';
                                 if (label) label += ': ';
                                 if (context.parsed.y !== null) {
-                                    if(label.includes('Price') || label.includes('EUR') || label.includes('USD')) return label + context.parsed.y.toFixed(2);
+                                    if(label.includes('USD') || label.includes('EUR')) return label + context.parsed.y.toFixed(2);
                                     if(label.includes('Modern')) return label + context.parsed.y.toFixed(1) + '%';
                                     return label + '#' + context.parsed.y;
                                 }

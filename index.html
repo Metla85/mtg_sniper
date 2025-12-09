@@ -47,8 +47,16 @@
         <div id="toolbar" class="flex justify-between items-center mb-4 px-2 gap-2">
             <div class="flex items-center gap-2 flex-1">
                 <span class="text-xs font-bold text-slate-500">Min €:</span>
-                <input type="number" id="filter-min-eur" value="0" class="w-16 p-1 text-sm border rounded text-center font-mono focus:border-indigo-500 outline-none" oninput="applyFilters()">
+                <input type="number" id="filter-min-eur" value="0" class="w-16 p-1 text-sm border rounded text-center font-mono focus:border-indigo-500 outline-none" oninput="applyFilters()">                
             </div>
+            <select id="filter-rec" onchange="applyFilters()" class="border border-slate-300 rounded px-2 py-1 text-sm bg-white shadow-sm focus:outline-none focus:border-indigo-500 hidden">
+                <option value="ALL">🏷️ Todas</option>
+                <option value="COMPRA">💎 Compra</option>
+                <option value="META">🚀 Meta</option>
+                <option value="ARBITRAJE">🇺🇸 Arbitraje</option>
+                <option value="RIESGO">⚠️ Riesgo</option>
+                <option value="VIGILAR">👁️ Vigilar</option>
+            </select>
             
             <div class="flex items-center gap-2">
                 <p class="text-xs text-slate-500 font-bold" id="status-text">Iniciando...</p>

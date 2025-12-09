@@ -107,8 +107,14 @@ async function loadData() {
         const filterInput = document.getElementById('filter-min-eur');
         if (filterInput && parseFloat(filterInput.value) > 0) applyFilters();
         else {
-            uiSetText('status-text', `${currentData.length} resultados`);
-            renderTable();
+            const filterInput = document.getElementById('filter-min-eur');
+            // SIEMPRE llamamos a applyFilters para que chequee si hay algún filtro puesto
+            if ((filterInput && parseFloat(filterInput.value) > 0) || (currentMode === 'top')) {
+                applyFilters();
+            } else {
+                uiSetText('status-text', `${currentData.length} resultados`);
+                renderTable();
+            }
         }
 
     } catch (err) {
@@ -125,16 +131,30 @@ async function loadData() {
 
 // --- 3. FILTROS ---
 function applyFilters() {
-    const input = document.getElementById('filter-min-eur');
-    let minEur = (input && input.value) ? parseFloat(input.value) : 0;
+    // Filtro Precio
+    const inputEur = document.getElementById('filter-min-eur');
+    let minEur = (inputEur && inputEur.value) ? parseFloat(inputEur.value) : 0;
     if (isNaN(minEur)) minEur = 0;
 
+    // Filtro Etiquetas (Nuevo)
+    const inputRec = document.getElementById('filter-rec');
+    const recValue = (inputRec && currentMode === 'top') ? inputRec.value : 'ALL';
+
     currentData = masterData.filter(item => {
+        // Condición 1: Precio
         const price = (item.eur !== null) ? parseFloat(item.eur) : 0;
-        return price >= minEur;
+        const passPrice = price >= minEur;
+
+        // Condición 2: Etiqueta (Solo si estamos en modo TOP)
+        let passRec = true;
+        if (currentMode === 'top' && recValue !== 'ALL') {
+            passRec = (item.recommendation === recValue);
+        }
+
+        return passPrice && passRec;
     });
 
-    doSort();
+    doSort(); // Reordenar tras filtrar
     uiSetText('status-text', `${currentData.length} resultados`);
     renderTable();
 }
@@ -382,13 +402,23 @@ function switchMode(mode) {
     ['top', 'arbitrage', 'trend', 'demand', 'search', 'radar'].forEach(m => {
         const btn = document.getElementById('tab-'+m);
         if (btn) {
-            // Estilo visual de la pestaña
             const isActive = (m === mode);
             btn.className = isActive 
                 ? 'flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap text-indigo-600'
                 : 'flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap text-gray-500';
         }
     });
+
+    // LÓGICA DEL FILTRO DE ETIQUETAS
+    const recSelect = document.getElementById('filter-rec');
+    if (recSelect) {
+        if (mode === 'top') {
+            recSelect.classList.remove('hidden'); // Mostrar en Top Picks
+            recSelect.value = 'ALL'; // Resetear al entrar
+        } else {
+            recSelect.classList.add('hidden'); // Ocultar en el resto
+        }
+    }
 
     if (mode === 'search') {
         uiHide('view-table'); uiShow('view-search'); uiHide('toolbar');
@@ -399,7 +429,6 @@ function switchMode(mode) {
         loadData();
     }
 }
-
 function initAutocomplete() {
     const input = document.getElementById('search-input');
     const list = document.getElementById('suggestions-list');

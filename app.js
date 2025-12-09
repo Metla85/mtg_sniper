@@ -350,7 +350,7 @@ async function openChart(i) {
 function switchMode(mode) {
     currentMode = mode;
     
-    // 1. Gestionar el estilo de las pestañas
+    // 1. Estilos de las pestañas
     ['top', 'arbitrage', 'trend', 'demand', 'search', 'radar'].forEach(m => {
         const btn = document.getElementById('tab-'+m);
         if (btn) {
@@ -361,40 +361,49 @@ function switchMode(mode) {
         }
     });
 
-    // 2. Gestionar visibilidad del Filtro de Etiquetas (Solo en Top Picks)
+    // Referencias a los contenedores
+    const searchContainer = document.getElementById('search-bar-container');
+    const filtersContainer = document.getElementById('filters-container');
     const recSelect = document.getElementById('filter-rec');
-    if (recSelect) {
-        if (mode === 'top') {
-            recSelect.classList.remove('hidden'); 
-            recSelect.value = 'ALL'; 
-        } else {
-            recSelect.classList.add('hidden'); 
-        }
-    }
 
-    // 3. CAMBIO CLAVE: SIEMPRE mostramos la toolbar (porque ahí está el buscador)
-    uiShow('toolbar'); 
+    // Siempre mostramos el toolbar padre, controlamos a sus hijos
+    uiShow('toolbar');
 
     if (mode === 'search') {
-        // Modo Búsqueda: Ocultamos la tabla, mostramos el grid de resultados
+        // --- MODO BÚSQUEDA ---
         uiHide('view-table'); 
-        uiShow('view-search'); 
+        uiShow('view-search');
         
-        // Ponemos el foco en el buscador automáticamente
+        // MOSTRAR Buscador / OCULTAR Filtros
+        if(searchContainer) searchContainer.classList.remove('hidden');
+        if(filtersContainer) filtersContainer.classList.add('hidden');
+        
+        // Focus al input
         setTimeout(() => {
             const input = document.getElementById('search-input');
             if(input) input.focus();
         }, 50);
 
     } else {
-        // Otros Modos: Mostramos la tabla, ocultamos el grid de búsqueda
+        // --- MODO DATOS (Top, Radar, etc) ---
         uiShow('view-table'); 
-        uiHide('view-search'); 
+        uiHide('view-search');
         
-        // Limpiamos el buscador para evitar confusión
-        document.getElementById('search-input').value = '';
+        // OCULTAR Buscador / MOSTRAR Filtros
+        if(searchContainer) searchContainer.classList.add('hidden');
+        if(filtersContainer) filtersContainer.classList.remove('hidden');
+
+        // Lógica específica del filtro de etiquetas (Solo en Top Picks)
+        if (recSelect) {
+            if (mode === 'top') {
+                recSelect.classList.remove('hidden'); 
+                recSelect.value = 'ALL'; 
+            } else {
+                recSelect.classList.add('hidden'); 
+            }
+        }
         
-        // Cargamos los datos de la pestaña seleccionada
+        // Cargar datos
         loadData();
     }
 }

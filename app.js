@@ -349,6 +349,8 @@ async function openChart(i) {
 
 function switchMode(mode) {
     currentMode = mode;
+    
+    // 1. Gestionar el estilo de las pestañas
     ['top', 'arbitrage', 'trend', 'demand', 'search', 'radar'].forEach(m => {
         const btn = document.getElementById('tab-'+m);
         if (btn) {
@@ -359,6 +361,7 @@ function switchMode(mode) {
         }
     });
 
+    // 2. Gestionar visibilidad del Filtro de Etiquetas (Solo en Top Picks)
     const recSelect = document.getElementById('filter-rec');
     if (recSelect) {
         if (mode === 'top') {
@@ -369,12 +372,29 @@ function switchMode(mode) {
         }
     }
 
+    // 3. CAMBIO CLAVE: SIEMPRE mostramos la toolbar (porque ahí está el buscador)
+    uiShow('toolbar'); 
+
     if (mode === 'search') {
-        uiHide('view-table'); uiShow('view-search'); uiHide('toolbar');
-        document.getElementById('search-input').focus();
+        // Modo Búsqueda: Ocultamos la tabla, mostramos el grid de resultados
+        uiHide('view-table'); 
+        uiShow('view-search'); 
+        
+        // Ponemos el foco en el buscador automáticamente
+        setTimeout(() => {
+            const input = document.getElementById('search-input');
+            if(input) input.focus();
+        }, 50);
+
     } else {
-        uiShow('view-table'); uiHide('view-search'); uiShow('toolbar');
+        // Otros Modos: Mostramos la tabla, ocultamos el grid de búsqueda
+        uiShow('view-table'); 
+        uiHide('view-search'); 
+        
+        // Limpiamos el buscador para evitar confusión
         document.getElementById('search-input').value = '';
+        
+        // Cargamos los datos de la pestaña seleccionada
         loadData();
     }
 }

@@ -3,115 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MTG Sniper V38</title>
+    <title>MTG Sniper V51</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-    
-    <link rel="stylesheet" href="style.css">
-</head>
-<body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
 
-    <div id="config-screen" class="hidden fixed inset-0 bg-slate-900 z-[9999] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-center mb-4">Conectar Sniper</h2>
-            <input type="text" id="input-url" placeholder="Supabase URL" class="w-full p-3 border rounded-xl mb-3 font-mono text-sm">
-            <input type="password" id="input-key" placeholder="Anon Key" class="w-full p-3 border rounded-xl mb-4 font-mono text-sm">
-            <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl">Entrar</button>
-        </div>
-    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <div id="main-screen" class="hidden max-w-6xl mx-auto pb-24">
+    <style>
+        body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .ratio-badge { @apply font-mono font-bold px-2 py-1 rounded text-xs; }
+        .ratio-extreme { @apply bg-red-100 text-red-800 border border-red-200; }
+        .ratio-high { @apply bg-green-100 text-green-800 border border-green-200; }
+        .rank-up { @apply text-green-600 font-bold; }
+        .rank-down { @apply text-red-400; }
+        .card-row:active { @apply bg-slate-100; }
+        .active-tab { @apply bg-white text-indigo-600 border-b-2 border-indigo-600 shadow-sm; }
+        .inactive-tab { @apply text-slate-400 hover:text-slate-600; }
+        .icon-btn { @apply p-2 rounded-full transition-colors flex items-center justify-center; }
         
-        <div class="mb-4 pt-2 flex flex-col gap-3 sticky top-0 bg-slate-50 z-40 pb-2 shadow-sm px-2 -mx-2">
-            <div class="flex justify-between items-center px-2">
-                <h1 class="text-2xl font-black tracking-tight cursor-pointer" onclick="location.reload()">MTG Sniper</h1>
-                <button onclick="resetConfig()" class="text-xl p-2 opacity-50">⚙️</button>
+        /* Ajustes para móviles */
+        @media (max-width: 640px) {
+            .hide-mobile { display: none; }
+            th, td { padding-left: 0.5rem; padding-right: 0.5rem; }
+        }
+    </style>
+</head>
+<body class="pb-20">
+
+    <div id="config-screen" class="hidden min-h-screen flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-slate-100">
+            <h1 class="text-2xl font-black text-slate-800 mb-6 text-center">MTG Sniper 🎯</h1>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Supabase URL</label>
+                    <input type="text" id="input-url" class="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Anon Key</label>
+                    <input type="password" id="input-key" class="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition shadow-md">
+                    Conectar Base de Datos
+                </button>
             </div>
         </div>
+    </div>
 
-        <div class="flex mb-4 bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto mx-1">
-    <button onclick="switchMode('top')" id="tab-top" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap text-indigo-600">🎯 Top Picks</button>
-    
-    <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">⚖️ Arbitraje</button>
-    <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🚀 Tendencias</button>
-    <button onclick="switchMode('radar')" id="tab-radar" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📡 Radar</button>
-    <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📈 Demanda</button>
-    <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
-</div>
-
-
-        <div id="toolbar" class="flex justify-between items-center mb-4 px-2 gap-2">
-            <div class="flex items-center gap-2 flex-1">
-                <span class="text-xs font-bold text-slate-500">Min €:</span>
-                <input type="number" id="filter-min-eur" value="0" class="w-16 p-1 text-sm border rounded text-center font-mono focus:border-indigo-500 outline-none" oninput="applyFilters()">                
-                <select id="filter-rec" onchange="applyFilters()" class="border border-slate-300 rounded px-2 py-1 text-sm bg-white shadow-sm focus:outline-none focus:border-indigo-500 hidden">
-                    <option value="ALL">🏷️ Todas</option>
-                    <option value="COMPRA">💎 Compra</option>
-                    <option value="META">🚀 Meta</option>
-                    <option value="ARBITRAJE">🇺🇸 Arbitraje</option>
-                    <option value="RIESGO">⚠️ Riesgo</option>
-                    <option value="VIGILAR">👁️ Vigilar</option>
-                </select>
-            </div>
-            
+    <div id="main-screen" class="hidden max-w-4xl mx-auto">
+        
+        <div class="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 py-3 shadow-sm flex justify-between items-center">
             <div class="flex items-center gap-2">
-                <p class="text-xs text-slate-500 font-bold" id="status-text">Iniciando...</p>
-                <button id="copy-btn" onclick="copyToClipboardSafe()" class="bg-white border border-slate-200 text-indigo-700 font-bold py-1 px-2 rounded text-xs shadow-sm">Copiar</button>
+                <div class="bg-indigo-600 text-white p-1.5 rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <h1 class="font-black text-lg text-slate-800 tracking-tight">MTG Sniper <span class="text-indigo-600">V51</span></h1>
+            </div>
+            <button onclick="resetConfig()" class="text-slate-400 hover:text-red-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </button>
+        </div>
+
+        <div class="px-2 pt-3 bg-slate-50">
+            <div class="flex bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
+                <button onclick="switchMode('top')" id="tab-top" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap text-indigo-600">🎯 Top Picks</button>
+                <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">⚖️ Arbitraje</button>
+                <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🚀 Tendencias</button>
+                <button onclick="switchMode('radar')" id="tab-radar" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📡 Radar</button>
+                <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📈 Demanda</button>
+                <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
             </div>
         </div>
 
-        <div id="view-table" class="mx-1 bg-white rounded-xl shadow-lg overflow-hidden border border-slate-200">
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold select-none">
-                        <tr>
-                            <th class="px-4 py-3 text-left pl-6 cursor-pointer hover:bg-slate-100" onclick="sortBy('name')">Carta ↕</th>
-                            <th class="px-2 py-3 text-center">Set</th>
-                            <th class="px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onclick="sortBy('eur')">EUR ↕</th>
-                            <th class="hide-mobile px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onclick="sortBy('usd')">USD ↕</th>
-                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('ratio')" id="col-metric">Gap ↕</th>
-                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('edhrec_rank')">Rank ↕</th>
-                            <th class="px-4 py-3 text-center cursor-pointer hover:bg-slate-100" onclick="sortBy('rank_change')">Var. ↕</th>
-                            <th class="px-4 py-3 text-center">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="table-body"></tbody>
-                </table>
+        <div id="toolbar" class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col gap-3">
+            
+            <div class="relative w-full">
+                <input type="text" id="search-input" placeholder="Escribe para buscar..." class="w-full border border-slate-300 rounded-lg p-2.5 pl-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                <ul id="suggestions-list" class="absolute z-50 bg-white border border-t-0 w-full rounded-b-lg shadow-xl hidden max-h-60 overflow-y-auto"></ul>
+            </div>
+
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    
+                    <div class="flex items-center bg-white border border-slate-300 rounded px-2 py-1 shadow-sm">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase mr-2">Min €</span>
+                        <input type="number" id="filter-min-eur" value="0" min="0" step="0.5" onchange="applyFilters()" class="w-12 text-sm font-mono outline-none text-slate-700">
+                    </div>
+
+                    <select id="filter-rec" onchange="applyFilters()" class="hidden border border-slate-300 rounded px-2 py-1 text-sm bg-white shadow-sm focus:outline-none focus:border-indigo-500 font-bold text-slate-700">
+                        <option value="ALL">🏷️ Todas</option>
+                        <option value="COMPRA">💎 Compra</option>
+                        <option value="META">🚀 Meta</option>
+                        <option value="ARBITRAJE">🇺🇸 Arbitraje</option>
+                        <option value="RIESGO">⚠️ Riesgo</option>
+                        <option value="VIGILAR">👁️ Vigilar</option>
+                    </select>
+                </div>
+                
+                <div id="status-text" class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Cargando...</div>
             </div>
         </div>
 
-        <div id="view-search" class="hidden flex flex-col gap-4 px-2">
-            <div class="relative z-50">
-                <input type="text" id="search-input" class="w-full p-4 pl-10 rounded-xl border border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-lg font-bold" placeholder="Escribe carta..." autocomplete="off">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">🔍</div>
-                <ul id="suggestions-list" class="hidden absolute w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 divide-y divide-slate-100"></ul>
+        <div id="view-table" class="overflow-x-auto bg-white min-h-[500px]">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-wider border-b border-slate-200 sticky top-0">
+                    <tr>
+                        <th class="px-4 py-3 pl-6 w-1/3 cursor-pointer hover:text-indigo-600" onclick="sortBy('name')">Carta</th>
+                        <th class="px-2 py-3 text-center">Set</th>
+                        <th class="px-4 py-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortBy('eur')">EUR</th>
+                        <th class="hide-mobile px-4 py-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortBy('usd')">USD</th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:text-indigo-600" onclick="sortBy('ratio')" id="col-metric">Metric</th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:text-indigo-600" onclick="sortBy('edhrec_rank')">Rank</th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:text-indigo-600" onclick="sortBy('rank_change')">Var</th>
+                        <th class="px-4 py-3 text-center">Links</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body" class="divide-y divide-slate-100 text-sm">
+                    </tbody>
+            </table>
+        </div>
+
+        <div id="view-search" class="hidden p-4 bg-slate-50 min-h-screen">
+            <div id="search-placeholder" class="text-center mt-20 text-slate-400">
+                <svg class="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <p>Usa la barra superior para buscar...</p>
             </div>
-            <div id="search-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20"></div>
-            <p id="search-placeholder" class="text-center text-slate-400 py-10">Usa el buscador superior.</p>
+            <div id="search-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            
+            <button id="copy-btn" onclick="copyToClipboardSafe()" class="hidden fixed bottom-6 right-6 bg-indigo-600 text-white p-4 rounded-full shadow-xl hover:bg-indigo-700 z-50">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            </button>
         </div>
 
     </div>
 
-    <div id="chart-modal" class="hidden fixed inset-0 bg-black bg-opacity-95 z-[3000] flex items-center justify-center p-4" onclick="document.getElementById('chart-modal').classList.add('hidden')">
-        <div class="bg-white rounded-xl w-full max-w-3xl p-4 relative h-96 flex flex-col" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-2">
-                <h3 id="modal-title" class="font-bold text-lg">Historial</h3>
-                <button onclick="document.getElementById('chart-modal').classList.add('hidden')" class="text-2xl leading-none text-slate-400">&times;</button>
+    <div id="chart-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-4xl h-[500px] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+                <h3 id="modal-title" class="font-bold text-lg text-slate-800">Historial</h3>
+                <button onclick="uiHide('chart-modal')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
             </div>
-            <div class="flex-1 relative w-full h-full">
+            <div class="flex-1 p-4 relative">
                 <canvas id="priceChart"></canvas>
             </div>
         </div>
     </div>
 
-    <div id="image-modal" class="hidden fixed inset-0 bg-black bg-opacity-95 z-[3000] flex items-center justify-center p-4" onclick="document.getElementById('image-modal').classList.add('hidden')">
-        <img id="enlarged-image" class="max-w-full max-h-full object-contain rounded-lg">
+    <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onclick="uiHide('image-modal')">
+        <img id="enlarged-image" src="" class="max-w-full max-h-screen rounded-lg shadow-2xl transition-transform duration-300 transform scale-100 hover:scale-105">
     </div>
 
     <script src="app.js"></script>
+
 </body>
 </html>

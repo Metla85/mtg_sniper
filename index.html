@@ -153,8 +153,11 @@
         </div>
     </div>
 
-    <div id="image-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onclick="uiHide('image-modal')">
-        <img id="enlarged-image" src="" class="max-w-full max-h-screen rounded-lg shadow-2xl transition-transform duration-300 transform scale-100 hover:scale-105">
+    <div id="image-modal" class="hidden fixed inset-0 bg-black/95 z-[9999] flex items-center justify-center p-4 cursor-pointer" onclick="uiHide('image-modal')">
+        <div class="relative max-w-full max-h-screen">
+            <img id="enlarged-image" src="" class="rounded-xl shadow-2xl object-contain max-h-[90vh] mx-auto border-2 border-white/20">
+            <p class="text-white/50 text-center mt-2 text-sm">Toca para cerrar</p>
+        </div>
     </div>
 
     <script src="app.js"></script>

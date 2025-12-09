@@ -1,5 +1,6 @@
-console.log("🚀 Iniciando MTG Sniper V51 (Robo-Advisor UI)...");
+console.log("🚀 Iniciando MTG Sniper V55 (Final)...");
 
+// --- VARIABLES GLOBALES ---
 let supabase = null;
 let currentMode = 'top'; 
 let masterData = []; 
@@ -9,6 +10,7 @@ let sortAsc = false;
 let chartInstance = null;
 let searchTimer = null;
 
+// --- CONSTANTES ---
 const ICONS = {
     chart: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-8v8m-4-8v8M4 16h16"></path></svg>`,
     mkm: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>`,
@@ -23,7 +25,6 @@ function uiSetHTML(id, html) { const el = document.getElementById(id); if (el) e
 function uiShow(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
 function uiHide(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
 
-// --- NUEVO HELPER PARA ETIQUETAS ---
 function getRecBadge(type) {
     if (type === 'COMPRA') return '<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded border border-green-300 shadow-sm">💎 COMPRA</span>';
     if (type === 'META') return '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded border border-purple-300 shadow-sm">🚀 META</span>';
@@ -32,9 +33,21 @@ function getRecBadge(type) {
     return '<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300">👁️ VIGILAR</span>';
 }
 
+// Función showImage movida al inicio para evitar errores de referencia
+function showImage(url) {
+    if (!url || url === 'null' || url === 'undefined') {
+        alert("Sin imagen."); return;
+    }
+    const img = document.getElementById('enlarged-image');
+    if (img) {
+        img.src = url;
+        uiShow('image-modal');
+    }
+}
+
 // --- 1. INICIO ---
 window.onload = function() {
-    if (typeof window.supabase === 'undefined') { alert("Error crítico: Librería Supabase no cargada."); return; }
+    if (typeof window.supabase === 'undefined') { alert("Error: Supabase JS no cargado."); return; }
 
     const url = localStorage.getItem('supabase_url');
     const key = localStorage.getItem('supabase_key');
@@ -105,16 +118,11 @@ async function loadData() {
         }
 
         const filterInput = document.getElementById('filter-min-eur');
-        if (filterInput && parseFloat(filterInput.value) > 0) applyFilters();
-        else {
-            const filterInput = document.getElementById('filter-min-eur');
-            // SIEMPRE llamamos a applyFilters para que chequee si hay algún filtro puesto
-            if ((filterInput && parseFloat(filterInput.value) > 0) || (currentMode === 'top')) {
-                applyFilters();
-            } else {
-                uiSetText('status-text', `${currentData.length} resultados`);
-                renderTable();
-            }
+        if ((filterInput && parseFloat(filterInput.value) > 0) || (currentMode === 'top')) {
+            applyFilters();
+        } else {
+            uiSetText('status-text', `${currentData.length} resultados`);
+            renderTable();
         }
 
     } catch (err) {
@@ -129,32 +137,26 @@ async function loadData() {
     }
 }
 
-// --- 3. FILTROS ---
+// --- 3. FILTROS Y ORDENACIÓN ---
 function applyFilters() {
-    // Filtro Precio
     const inputEur = document.getElementById('filter-min-eur');
     let minEur = (inputEur && inputEur.value) ? parseFloat(inputEur.value) : 0;
     if (isNaN(minEur)) minEur = 0;
 
-    // Filtro Etiquetas (Nuevo)
     const inputRec = document.getElementById('filter-rec');
     const recValue = (inputRec && currentMode === 'top') ? inputRec.value : 'ALL';
 
     currentData = masterData.filter(item => {
-        // Condición 1: Precio
         const price = (item.eur !== null) ? parseFloat(item.eur) : 0;
         const passPrice = price >= minEur;
-
-        // Condición 2: Etiqueta (Solo si estamos en modo TOP)
         let passRec = true;
         if (currentMode === 'top' && recValue !== 'ALL') {
             passRec = (item.recommendation === recValue);
         }
-
         return passPrice && passRec;
     });
 
-    doSort(); // Reordenar tras filtrar
+    doSort();
     uiSetText('status-text', `${currentData.length} resultados`);
     renderTable();
 }
@@ -174,7 +176,7 @@ function doSort() {
     });
 }
 
-// --- 4. RENDERIZADO (CON BADGES) ---
+// --- 4. RENDERIZADO ---
 function renderTable() {
     const tbody = document.getElementById('table-body');
     if (!tbody) return;
@@ -187,7 +189,6 @@ function renderTable() {
     displayData.forEach((item, index) => {
         let val, color;
         
-        // Valor Principal
         if (currentMode === 'top') {
             val = Math.round(item.sniper_score || 0);
             color = val > 80 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-green-50 text-green-700 border-green-200';
@@ -206,7 +207,6 @@ function renderTable() {
             }
         }
         
-        // Flechas
         const change = parseFloat(item.rank_change || 0);
         let arrow = '—', arrowClass = 'text-slate-300';
         if (currentMode === 'radar') {
@@ -219,24 +219,30 @@ function renderTable() {
 
         const { mkmLink, ckLink, edhLink } = getLinks(item);
         
-        // Botón Moxfield
         let radarBtn = '';
         if (item.example_deck_id) {
             radarBtn = `<a href="https://www.moxfield.com/decks/${item.example_deck_id}" target="_blank" class="icon-btn text-orange-600 hover:bg-orange-50">${ICONS.moxfield}</a>`;
         }
 
-        // GENERAR BADGE (SOLO EN TOP PICKS)
         let recBadge = '';
         if (currentMode === 'top' && item.recommendation) {
             recBadge = `<div class="mt-1">${getRecBadge(item.recommendation)}</div>`;
+        }
+
+        // CONTROL DE IMAGEN NULA
+        let imgTag = '';
+        if(item.image_uri) {
+            imgTag = `<img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover shadow-sm" onclick="showImage('${item.image_uri}')">`;
+        } else {
+            imgTag = `<div class="w-10 h-10 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-xs text-slate-400">?</div>`;
         }
 
         const row = `
             <tr class="card-row border-b border-slate-100 hover:bg-slate-50">
                 <td class="px-4 py-3 pl-6">
                     <div class="flex items-center gap-3">
-                        <div class="cursor-pointer" onclick="showImage('${item.image_uri}')">
-                            <img src="${item.image_uri}" class="w-10 h-10 rounded-full border border-slate-200 object-cover shadow-sm" onerror="this.style.display='none'">
+                        <div class="cursor-pointer">
+                            ${imgTag}
                         </div>
                         <div>
                             <div class="font-bold text-slate-800 text-sm leading-tight">${item.name}</div>
@@ -274,36 +280,19 @@ function getLinks(item) {
     return { mkmLink, ckLink, edhLink };
 }
 
-function showImage(url) {
-    console.log("📸 Intentando abrir imagen:", url);
-    
-    if (!url || url === 'null' || url === 'undefined') {
-        alert("Esta carta no tiene imagen disponible.");
-        return;
-    }
-
-    const img = document.getElementById('enlarged-image');
-    if (img) {
-        img.src = url;
-        uiShow('image-modal');
-    } else {
-        console.error("❌ Error: No se encuentra el elemento HTML 'enlarged-image'");
-    }
-}
-
 async function openChart(i) {
     const item = currentData[i];
     if (!item) return;
 
     uiShow('chart-modal');
-    uiSetText('modal-title', `${item.name}`); // Quitamos el set code del título porque la gráfica ahora agrupa todos
+    uiSetText('modal-title', `${item.name}`);
     
     if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
     try {
         const { data, error } = await supabase.rpc('get_card_history', { 
             target_card_name: item.name, 
-            target_set_code: null // Enviamos NULL para que el SQL agrupe todas las versiones
+            target_set_code: null 
         });
 
         if (error || !data || data.length === 0) {
@@ -318,92 +307,36 @@ async function openChart(i) {
             data: {
                 labels: data.map(x => new Date(x.date).toLocaleDateString(undefined, {month:'2-digit', day:'2-digit'})),
                 datasets: [
-                    // 1. PRECIO USD (Azul)
                     { 
-                        label: 'USD', 
-                        data: data.map(x => x.usd), 
+                        label: 'USD', data: data.map(x => x.usd), 
                         borderColor: '#3b82f6', backgroundColor: '#3b82f6',
-                        tension: 0.2, pointRadius: 2, borderWidth: 2,
-                        yAxisID: 'y_price', order: 2 
+                        tension: 0.2, pointRadius: 2, borderWidth: 2, yAxisID: 'y_price', order: 2 
                     },
-                    // 2. PRECIO EUR (Verde)
                     { 
-                        label: 'EUR', 
-                        data: data.map(x => x.eur), 
+                        label: 'EUR', data: data.map(x => x.eur), 
                         borderColor: '#22c55e', backgroundColor: '#22c55e',
-                        tension: 0.2, pointRadius: 2, borderWidth: 2,
-                        yAxisID: 'y_price', order: 1 
+                        tension: 0.2, pointRadius: 2, borderWidth: 2, yAxisID: 'y_price', order: 1 
                     },
-                    // 3. RANKING EDH (Morado Punteado - EJE IZQUIERDO)
                     { 
-                        label: 'EDH Rank', 
-                        data: data.map(x => x.edhrec_rank), 
-                        borderColor: '#a855f7', 
-                        borderDash: [5, 5],     
-                        pointRadius: 0, borderWidth: 1,
-                        yAxisID: 'y_rank',
-                        hidden: false, 
-                        order: 3
+                        label: 'EDH Rank', data: data.map(x => x.edhrec_rank), 
+                        borderColor: '#a855f7', borderDash: [5, 5], pointRadius: 0, borderWidth: 1,
+                        yAxisID: 'y_rank', hidden: false, order: 3
                     },
-                    // 4. MODERN POPULARITY (Naranja Relleno - FONDO)
                     { 
-                        label: 'Modern %', 
-                        data: data.map(x => x.modern_popularity), 
-                        borderColor: '#f97316', 
-                        backgroundColor: 'rgba(249, 115, 22, 0.1)', 
-                        fill: true, 
-                        tension: 0.4, pointRadius: 0, borderWidth: 0,
-                        yAxisID: 'y_modern',
-                        order: 4 
+                        label: 'Modern %', data: data.map(x => x.modern_popularity), 
+                        borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', 
+                        fill: true, tension: 0.4, pointRadius: 0, borderWidth: 0,
+                        yAxisID: 'y_modern', order: 4 
                     }
                 ]
             },
             options: { 
-                maintainAspectRatio: false,
-                responsive: true,
-                interaction: { mode: 'index', intersect: false },
+                maintainAspectRatio: false, responsive: true, interaction: { mode: 'index', intersect: false },
                 scales: { 
                     x: { grid: { display: false } },
-                    
-                    // EJE DERECHO (Precios)
-                    y_price: { 
-                        type: 'linear', position: 'right', beginAtZero: false,
-                        title: { display: true, text: 'Precio' },
-                        grid: { color: '#f3f4f6' }
-                    },
-                    
-                    // EJE DERECHO INVISIBLE (Para escalar el % Modern)
-                    y_modern: {
-                        type: 'linear', position: 'right', beginAtZero: true,
-                        suggestedMax: 50, // Escala hasta 50%
-                        display: false 
-                    },
-
-                    // EJE IZQUIERDO (Rank EDH) - VISIBLE AHORA
-                    y_rank: { 
-                        type: 'linear', 
-                        position: 'left', 
-                        reverse: true, // Invertido: Rank 1 arriba
-                        display: true, // <--- AHORA SÍ SE VE LA ESCALA
-                        title: { display: true, text: 'Rank EDH #' },
-                        grid: { drawOnChartArea: false } // Para no ensuciar la gráfica con más líneas horizontales
-                    }
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) label += ': ';
-                                if (context.parsed.y !== null) {
-                                    if(label.includes('USD') || label.includes('EUR')) return label + context.parsed.y.toFixed(2);
-                                    if(label.includes('Modern')) return label + context.parsed.y.toFixed(1) + '%';
-                                    return label + '#' + context.parsed.y;
-                                }
-                                return null;
-                            }
-                        }
-                    }
+                    y_price: { type: 'linear', position: 'right', beginAtZero: false, title: { display: true, text: 'Precio' }, grid: { color: '#f3f4f6' } },
+                    y_modern: { type: 'linear', position: 'right', beginAtZero: true, suggestedMax: 50, display: false },
+                    y_rank: { type: 'linear', position: 'left', reverse: true, display: true, title: { display: true, text: 'Rank EDH #' }, grid: { drawOnChartArea: false } }
                 }
             }
         });
@@ -426,14 +359,13 @@ function switchMode(mode) {
         }
     });
 
-    // LÓGICA DEL FILTRO DE ETIQUETAS
     const recSelect = document.getElementById('filter-rec');
     if (recSelect) {
         if (mode === 'top') {
-            recSelect.classList.remove('hidden'); // Mostrar en Top Picks
-            recSelect.value = 'ALL'; // Resetear al entrar
+            recSelect.classList.remove('hidden'); 
+            recSelect.value = 'ALL'; 
         } else {
-            recSelect.classList.add('hidden'); // Ocultar en el resto
+            recSelect.classList.add('hidden'); 
         }
     }
 
@@ -446,6 +378,7 @@ function switchMode(mode) {
         loadData();
     }
 }
+
 function initAutocomplete() {
     const input = document.getElementById('search-input');
     const list = document.getElementById('suggestions-list');
@@ -472,7 +405,6 @@ function initAutocomplete() {
     });
 }
 
-// --- 6. BÚSQUEDA ---
 async function performSearch(name) {
     uiHide('suggestions-list');
     document.getElementById('search-input').value = name;
@@ -492,12 +424,21 @@ async function performSearch(name) {
 
     currentData.forEach((item, i) => {
         const { mkmLink, ckLink, edhLink } = getLinks(item);
+        
+        // Control de imagen nula en buscador
+        let imgTag = '';
+        if(item.image_uri) {
+            imgTag = `<img src="${item.image_uri}" class="w-20 rounded shadow" onclick="showImage('${item.image_uri}')">`;
+        } else {
+            imgTag = `<div class="w-20 h-28 bg-slate-200 rounded shadow flex items-center justify-center text-xs text-slate-400">?</div>`;
+        }
+
         const card = document.createElement('div');
         card.className = "card-sheet bg-white rounded shadow p-4 flex flex-col gap-2";
         
         card.innerHTML = `
             <div class="flex gap-4">
-                <img src="${item.image_uri}" class="w-20 rounded shadow" onclick="showImage('${item.image_uri}')">
+                ${imgTag}
                 <div class="flex-1">
                     <div class="font-bold text-lg">${item.name}</div>
                     <div class="text-xs uppercase text-gray-500 font-bold">${item.set_code}</div>

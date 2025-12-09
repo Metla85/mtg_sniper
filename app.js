@@ -259,14 +259,14 @@ async function openChart(i) {
     if (!item) return;
 
     uiShow('chart-modal');
-    uiSetText('modal-title', `${item.name} (${item.set_code})`);
+    uiSetText('modal-title', `${item.name}`); // Quitamos el set code del título porque la gráfica ahora agrupa todos
     
     if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
     try {
         const { data, error } = await supabase.rpc('get_card_history', { 
             target_card_name: item.name, 
-            target_set_code: item.set_code 
+            target_set_code: null // Enviamos NULL para que el SQL agrupe todas las versiones
         });
 
         if (error || !data || data.length === 0) {
@@ -297,7 +297,7 @@ async function openChart(i) {
                         tension: 0.2, pointRadius: 2, borderWidth: 2,
                         yAxisID: 'y_price', order: 1 
                     },
-                    // 3. RANKING EDH (Morado Punteado)
+                    // 3. RANKING EDH (Morado Punteado - EJE IZQUIERDO)
                     { 
                         label: 'EDH Rank', 
                         data: data.map(x => x.edhrec_rank), 
@@ -305,19 +305,19 @@ async function openChart(i) {
                         borderDash: [5, 5],     
                         pointRadius: 0, borderWidth: 1,
                         yAxisID: 'y_rank',
-                        hidden: false, // <--- CAMBIO AQUÍ: AHORA ES VISIBLE
+                        hidden: false, 
                         order: 3
                     },
-                    // 4. MODERN POPULARITY (Naranja Relleno)
+                    // 4. MODERN POPULARITY (Naranja Relleno - FONDO)
                     { 
                         label: 'Modern %', 
                         data: data.map(x => x.modern_popularity), 
                         borderColor: '#f97316', 
                         backgroundColor: 'rgba(249, 115, 22, 0.1)', 
                         fill: true, 
-                        tension: 0.4, pointRadius: 0, borderWidth: 0, // Sin borde para que sea sutil
+                        tension: 0.4, pointRadius: 0, borderWidth: 0,
                         yAxisID: 'y_modern',
-                        order: 4 // Al fondo
+                        order: 4 
                     }
                 ]
             },
@@ -328,25 +328,28 @@ async function openChart(i) {
                 scales: { 
                     x: { grid: { display: false } },
                     
-                    // Eje Precios (Derecha)
+                    // EJE DERECHO (Precios)
                     y_price: { 
                         type: 'linear', position: 'right', beginAtZero: false,
                         title: { display: true, text: 'Precio' },
                         grid: { color: '#f3f4f6' }
                     },
                     
-                    // Eje Modern % (Derecha - Invisible pero escala el área naranja)
+                    // EJE DERECHO INVISIBLE (Para escalar el % Modern)
                     y_modern: {
                         type: 'linear', position: 'right', beginAtZero: true,
-                        suggestedMax: 50, 
+                        suggestedMax: 50, // Escala hasta 50%
                         display: false 
                     },
 
-                    // Eje Rank EDH (Izquierda - Invertido: cuanto menos mejor)
+                    // EJE IZQUIERDO (Rank EDH) - VISIBLE AHORA
                     y_rank: { 
-                        type: 'linear', position: 'left', reverse: true, 
-                        grid: { display: false },
-                        title: { display: true, text: 'Rank #' }
+                        type: 'linear', 
+                        position: 'left', 
+                        reverse: true, // Invertido: Rank 1 arriba
+                        display: true, // <--- AHORA SÍ SE VE LA ESCALA
+                        title: { display: true, text: 'Rank EDH #' },
+                        grid: { drawOnChartArea: false } // Para no ensuciar la gráfica con más líneas horizontales
                     }
                 },
                 plugins: {
@@ -372,11 +375,6 @@ async function openChart(i) {
         uiHide('chart-modal');
         alert("Error gráfica: " + err.message);
     }
-}
-
-function showImage(url) {
-    document.getElementById('enlarged-image').src = url;
-    uiShow('image-modal');
 }
 
 function switchMode(mode) {

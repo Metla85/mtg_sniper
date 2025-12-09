@@ -47,5 +47,124 @@
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Anon Key</label>
-                    <input type="password" id="input
-                        
+                    <input type="password" id="input-key" class="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <button onclick="saveConfig()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg hover:bg-indigo-700 transition shadow-md">
+                    Conectar Base de Datos
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-screen" class="hidden max-w-4xl mx-auto">
+        
+        <div class="bg-white border-b border-slate-200 sticky top-0 z-20 px-4 py-3 shadow-sm flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="bg-indigo-600 text-white p-1.5 rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <h1 class="font-black text-lg text-slate-800 tracking-tight">MTG Sniper <span class="text-indigo-600">V56</span></h1>
+            </div>
+            <button onclick="resetConfig()" class="text-slate-400 hover:text-red-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </button>
+        </div>
+
+        <div class="px-2 pt-3 bg-slate-50">
+            <div class="flex bg-white rounded-lg shadow-sm border border-slate-200 overflow-x-auto">
+                <button onclick="switchMode('top')" id="tab-top" class="flex-1 py-3 px-2 text-xs font-bold uppercase active-tab whitespace-nowrap text-indigo-600">🎯 Top Picks</button>
+                <button onclick="switchMode('arbitrage')" id="tab-arbitrage" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">⚖️ Arbitraje</button>
+                <button onclick="switchMode('trend')" id="tab-trend" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🚀 Tendencias</button>
+                <button onclick="switchMode('radar')" id="tab-radar" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📡 Radar</button>
+                <button onclick="switchMode('demand')" id="tab-demand" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">📈 Demanda</button>
+                <button onclick="switchMode('search')" id="tab-search" class="flex-1 py-3 px-2 text-xs font-bold uppercase inactive-tab whitespace-nowrap">🔍 Buscar</button>
+            </div>
+        </div>
+
+        <div id="toolbar" class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col gap-3">
+            
+            <div id="search-bar-container" class="relative w-full hidden">
+                <input type="text" id="search-input" placeholder="Escribe el nombre de la carta..." class="w-full border border-slate-300 rounded-lg p-2.5 pl-4 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                <ul id="suggestions-list" class="absolute z-50 bg-white border border-t-0 w-full rounded-b-lg shadow-xl hidden max-h-60 overflow-y-auto"></ul>
+            </div>
+
+            <div id="filters-container" class="flex items-center justify-between w-full">
+                <div class="flex items-center gap-2">
+                    
+                    <div class="flex items-center bg-white border border-slate-300 rounded px-2 py-1 shadow-sm">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase mr-2">Min €</span>
+                        <input type="number" id="filter-min-eur" value="0" min="0" step="0.5" onchange="applyFilters()" class="w-12 text-sm font-mono outline-none text-slate-700">
+                    </div>
+
+                    <select id="filter-rec" onchange="applyFilters()" class="border border-slate-300 rounded px-2 py-1 text-sm bg-white shadow-sm focus:outline-none focus:border-indigo-500 font-bold text-slate-700">
+                        <option value="ALL">🏷️ Todas</option>
+                        <option value="COMPRA">💎 Compra</option>
+                        <option value="META">🚀 Meta</option>
+                        <option value="ARBITRAJE">🇺🇸 Arbitraje</option>
+                        <option value="RIESGO">⚠️ Riesgo</option>
+                        <option value="VIGILAR">👁️ Vigilar</option>
+                    </select>
+                </div>
+                
+                <div id="status-text" class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Cargando...</div>
+            </div>
+
+        </div>
+
+        <div id="view-table" class="overflow-x-auto bg-white min-h-[500px]">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold tracking-wider border-b border-slate-200 sticky top-0">
+                    <tr>
+                        <th class="px-4 py-3 pl-6 w-1/3 cursor-pointer hover:text-indigo-600" onclick="sortBy('name')">Carta</th>
+                        <th class="px-2 py-3 text-center">Set</th>
+                        <th class="px-4 py-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortBy('eur')">EUR</th>
+                        <th class="hide-mobile px-4 py-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortBy('usd')">USD</th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:text-indigo-600" onclick="sortBy('ratio')" id="col-metric">Metric</th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:text-indigo-600" onclick="sortBy('edhrec_rank')">Rank</th>
+                        <th class="px-4 py-3 text-center cursor-pointer hover:text-indigo-600" onclick="sortBy('rank_change')">Var</th>
+                        <th class="px-4 py-3 text-center">Links</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body" class="divide-y divide-slate-100 text-sm">
+                    </tbody>
+            </table>
+        </div>
+
+        <div id="view-search" class="hidden p-4 bg-slate-50 min-h-screen">
+            <div id="search-placeholder" class="text-center mt-20 text-slate-400">
+                <svg class="w-16 h-16 mx-auto mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <p>Usa la barra superior para buscar...</p>
+            </div>
+            <div id="search-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            
+            <button id="copy-btn" onclick="copyToClipboardSafe()" class="hidden fixed bottom-6 right-6 bg-indigo-600 text-white p-4 rounded-full shadow-xl hover:bg-indigo-700 z-50">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            </button>
+        </div>
+
+    </div>
+
+    <div id="chart-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-4xl h-[500px] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+                <h3 id="modal-title" class="font-bold text-lg text-slate-800">Historial</h3>
+                <button onclick="uiHide('chart-modal')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="flex-1 p-4 relative">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="image-modal" class="hidden fixed inset-0 bg-black/95 z-[9999] flex items-center justify-center p-4 cursor-pointer" onclick="uiHide('image-modal')">
+        <div class="relative max-w-full max-h-screen">
+            <img id="enlarged-image" src="" class="rounded-xl shadow-2xl object-contain max-h-[90vh] mx-auto border-2 border-white/20">
+            <p class="text-white/50 text-center mt-2 text-sm">Toca para cerrar</p>
+        </div>
+    </div>
+
+    <script src="app.js?v=56"></script>
+
+</body>
+                    </html>
+                    
